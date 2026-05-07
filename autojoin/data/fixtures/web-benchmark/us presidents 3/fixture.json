@@ -1,0 +1,37 @@
+{
+  "pair_id": "us presidents 3",
+  "source": {
+    "file": "data/raw/web-benchmark/us presidents 3/source.csv",
+    "key_columns": [
+      "State",
+      "Presidents per state",
+      "Presidents",
+      "#th President"
+    ]
+  },
+  "target": {
+    "file": "data/raw/web-benchmark/us presidents 3/target.csv",
+    "key_columns": [
+      "target-President",
+      "Party",
+      "Term as President",
+      "Vice-President"
+    ]
+  },
+  "ground_truth": {
+    "file": "data/raw/web-benchmark/us presidents 3/ground truth.csv",
+    "format": "row_values",
+    "source_key_columns": [
+      "source-State",
+      "source-Presidents per state",
+      "source-Presidents",
+      "source-#th President"
+    ],
+    "target_key_columns": [
+      "target-President",
+      "target-Party",
+      "target-Term as President",
+      "target-Vice-President"
+    ]
+  }
+}

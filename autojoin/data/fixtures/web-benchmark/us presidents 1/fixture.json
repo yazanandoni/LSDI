@@ -1,0 +1,49 @@
+{
+  "pair_id": "us presidents 1",
+  "source": {
+    "file": "data/raw/web-benchmark/us presidents 1/source.csv",
+    "key_columns": [
+      "\u2116",
+      "President",
+      "State",
+      "Term of office",
+      "Party",
+      "Term;",
+      "Previous office"
+    ]
+  },
+  "target": {
+    "file": "data/raw/web-benchmark/us presidents 1/target.csv",
+    "key_columns": [
+      "OB",
+      "Name",
+      "Birth Name",
+      "OP",
+      "Birthplace",
+      "State of Birth",
+      "AP"
+    ]
+  },
+  "ground_truth": {
+    "file": "data/raw/web-benchmark/us presidents 1/ground truth.csv",
+    "format": "row_values",
+    "source_key_columns": [
+      "source-\u2116",
+      "source-President",
+      "source-State",
+      "source-Term of office",
+      "source-Party",
+      "source-Term;",
+      "source-Previous office"
+    ],
+    "target_key_columns": [
+      "target-OB",
+      "target-Name",
+      "target-Birth Name",
+      "target-OP",
+      "target-Birthplace",
+      "target-State of Birth",
+      "target-AP"
+    ]
+  }
+}

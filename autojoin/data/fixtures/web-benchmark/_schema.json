@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "description": "Fixture schema for AutoJoin web-benchmark pairs.",
+  "fields": {
+    "pair_id": "string; directory name of the benchmark pair",
+    "source": {
+      "file": "string; relative path to source.csv",
+      "key_columns": "array<string>; columns used as join keys in source"
+    },
+    "target": {
+      "file": "string; relative path to target.csv",
+      "key_columns": "array<string>; columns used as join keys in target"
+    },
+    "ground_truth": {
+      "file": "string; relative path to ground truth.csv",
+      "format": "string; 'row_values' or 'row_ids'",
+      "source_key_columns": "array<string>; columns in ground truth that represent source keys",
+      "target_key_columns": "array<string>; columns in ground truth that represent target keys"
+    }
+  }
+}

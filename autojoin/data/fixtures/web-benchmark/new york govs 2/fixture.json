@@ -1,0 +1,33 @@
+{
+  "pair_id": "new york govs 2",
+  "source": {
+    "file": "data/raw/web-benchmark/new york govs 2/source.csv",
+    "key_columns": [
+      "Governor",
+      "Term of office",
+      "Party"
+    ]
+  },
+  "target": {
+    "file": "data/raw/web-benchmark/new york govs 2/target.csv",
+    "key_columns": [
+      "#",
+      "Name (Tenure)",
+      "Party"
+    ]
+  },
+  "ground_truth": {
+    "file": "data/raw/web-benchmark/new york govs 2/ground truth.csv",
+    "format": "row_values",
+    "source_key_columns": [
+      "source-Governor",
+      "source-Term of office",
+      "source-Party"
+    ],
+    "target_key_columns": [
+      "target-#",
+      "target-Name (Tenure)",
+      "target-Party"
+    ]
+  }
+}

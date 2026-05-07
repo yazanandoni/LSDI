@@ -1,0 +1,25 @@
+{
+  "pair_id": "sharif username to email",
+  "source": {
+    "file": "data/raw/web-benchmark/sharif username to email/source.csv",
+    "key_columns": [
+      "Username"
+    ]
+  },
+  "target": {
+    "file": "data/raw/web-benchmark/sharif username to email/target.csv",
+    "key_columns": [
+      "Email"
+    ]
+  },
+  "ground_truth": {
+    "file": "data/raw/web-benchmark/sharif username to email/ground truth.csv",
+    "format": "row_values",
+    "source_key_columns": [
+      "Username"
+    ],
+    "target_key_columns": [
+      "Email"
+    ]
+  }
+}

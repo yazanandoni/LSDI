@@ -1,0 +1,53 @@
+{
+  "pair_id": "duke cs profs",
+  "source": {
+    "file": "data/raw/web-benchmark/duke cs profs/source.csv",
+    "key_columns": [
+      "column 0",
+      "column 1",
+      "column 1"
+    ]
+  },
+  "target": {
+    "file": "data/raw/web-benchmark/duke cs profs/target.csv",
+    "key_columns": [
+      "Name",
+      "University",
+      "JoinYear",
+      "Rank",
+      "Subfield",
+      "Bachelors",
+      "Masters",
+      "Doctorate",
+      "PostDoc",
+      "Sources1",
+      "Sources2",
+      "Sources3",
+      "Sources4"
+    ]
+  },
+  "ground_truth": {
+    "file": "data/raw/web-benchmark/duke cs profs/ground truth.csv",
+    "format": "row_values",
+    "source_key_columns": [
+      "source-column 0",
+      "source-column 1",
+      "source-column 1"
+    ],
+    "target_key_columns": [
+      "target-Name",
+      "target-University",
+      "target-JoinYear",
+      "target-Rank",
+      "target-Subfield",
+      "target-Bachelors",
+      "target-Masters",
+      "target-Doctorate",
+      "target-PostDoc",
+      "target-Sources1",
+      "target-Sources2",
+      "target-Sources3",
+      "target-Sources4"
+    ]
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "pair_id": "christmas songs 2",
+  "source": {
+    "file": "data/raw/web-benchmark/christmas songs 2/source.csv",
+    "key_columns": [
+      "Title",
+      "Artist",
+      "Year",
+      "Additional Information"
+    ]
+  },
+  "target": {
+    "file": "data/raw/web-benchmark/christmas songs 2/target.csv",
+    "key_columns": [
+      "column 1",
+      "column 2"
+    ]
+  },
+  "ground_truth": {
+    "file": "data/raw/web-benchmark/christmas songs 2/ground truth.csv",
+    "format": "row_values",
+    "source_key_columns": [
+      "source-Title",
+      "source-Artist",
+      "source-Year",
+      "source-Additional Information"
+    ],
+    "target_key_columns": [
+      "target-column 1",
+      "target-column 2"
+    ]
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "pair_id": "k12 name to email",
+  "source": {
+    "file": "data/raw/web-benchmark/k12 name to email/source.csv",
+    "key_columns": [
+      "SchoolName",
+      "Name"
+    ]
+  },
+  "target": {
+    "file": "data/raw/web-benchmark/k12 name to email/target.csv",
+    "key_columns": [
+      "email"
+    ]
+  },
+  "ground_truth": {
+    "file": "data/raw/web-benchmark/k12 name to email/ground truth.csv",
+    "format": "row_values",
+    "source_key_columns": [
+      "SchoolName",
+      "Name"
+    ],
+    "target_key_columns": [
+      "email"
+    ]
+  }
+}

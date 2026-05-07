@@ -1,0 +1,35 @@
+{
+  "pair_id": "new york govs 4",
+  "source": {
+    "file": "data/raw/web-benchmark/new york govs 4/source.csv",
+    "key_columns": [
+      "Governor",
+      "Home Town (According to the official N.Y. State Governor's website)",
+      "Term",
+      "Party"
+    ]
+  },
+  "target": {
+    "file": "data/raw/web-benchmark/new york govs 4/target.csv",
+    "key_columns": [
+      "#",
+      "Name (Tenure)",
+      "Party"
+    ]
+  },
+  "ground_truth": {
+    "file": "data/raw/web-benchmark/new york govs 4/ground truth.csv",
+    "format": "row_values",
+    "source_key_columns": [
+      "source-Governor",
+      "source-Home Town (According to the official N.Y. State Governor's website)",
+      "source-Term",
+      "source-Party"
+    ],
+    "target_key_columns": [
+      "target-#",
+      "target-Name (Tenure)",
+      "target-Party"
+    ]
+  }
+}

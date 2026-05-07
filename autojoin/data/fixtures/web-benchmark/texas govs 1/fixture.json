@@ -1,0 +1,35 @@
+{
+  "pair_id": "texas govs 1",
+  "source": {
+    "file": "data/raw/web-benchmark/texas govs 1/source.csv",
+    "key_columns": [
+      "#",
+      "Governor",
+      "Party"
+    ]
+  },
+  "target": {
+    "file": "data/raw/web-benchmark/texas govs 1/target.csv",
+    "key_columns": [
+      "Governor's Name",
+      "State",
+      "Time in Office",
+      "Party"
+    ]
+  },
+  "ground_truth": {
+    "file": "data/raw/web-benchmark/texas govs 1/ground truth.csv",
+    "format": "row_values",
+    "source_key_columns": [
+      "source-#",
+      "source-Governor",
+      "source-Party"
+    ],
+    "target_key_columns": [
+      "target-Governor's Name",
+      "target-State",
+      "target-Time in Office",
+      "target-Party"
+    ]
+  }
+}
