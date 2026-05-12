@@ -1,0 +1,31 @@
+{
+  "pair_id": "christmas songs 1",
+  "source": {
+    "file": "data/raw/web-benchmark/christmas songs 1/source.csv",
+    "key_columns": [
+      "No",
+      "Song",
+      "Artist"
+    ]
+  },
+  "target": {
+    "file": "data/raw/web-benchmark/christmas songs 1/target.csv",
+    "key_columns": [
+      "column 1",
+      "column 2"
+    ]
+  },
+  "ground_truth": {
+    "file": "data/raw/web-benchmark/christmas songs 1/ground truth.csv",
+    "format": "row_values",
+    "source_key_columns": [
+      "source-No",
+      "source-Song",
+      "source-Artist"
+    ],
+    "target_key_columns": [
+      "target-1",
+      "target-All I Want For Christmas Is You - Mariah Carey"
+    ]
+  }
+}

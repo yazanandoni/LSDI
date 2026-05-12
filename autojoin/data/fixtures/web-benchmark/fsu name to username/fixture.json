@@ -1,0 +1,27 @@
+{
+  "pair_id": "fsu name to username",
+  "source": {
+    "file": "data/raw/web-benchmark/fsu name to username/source.csv",
+    "key_columns": [
+      "last name",
+      "first name"
+    ]
+  },
+  "target": {
+    "file": "data/raw/web-benchmark/fsu name to username/target.csv",
+    "key_columns": [
+      "Username"
+    ]
+  },
+  "ground_truth": {
+    "file": "data/raw/web-benchmark/fsu name to username/ground truth.csv",
+    "format": "row_values",
+    "source_key_columns": [
+      "last name",
+      "first name"
+    ],
+    "target_key_columns": [
+      "Username"
+    ]
+  }
+}

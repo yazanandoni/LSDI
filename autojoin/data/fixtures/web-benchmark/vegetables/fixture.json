@@ -1,0 +1,27 @@
+{
+  "pair_id": "vegetables",
+  "source": {
+    "file": "data/raw/web-benchmark/vegetables/source.csv",
+    "key_columns": [
+      "Vegetable",
+      "Type"
+    ]
+  },
+  "target": {
+    "file": "data/raw/web-benchmark/vegetables/target.csv",
+    "key_columns": [
+      "Vegetable - Type"
+    ]
+  },
+  "ground_truth": {
+    "file": "data/raw/web-benchmark/vegetables/ground truth.csv",
+    "format": "row_values",
+    "source_key_columns": [
+      "Vegetable",
+      "Type"
+    ],
+    "target_key_columns": [
+      "Vegetable - Type"
+    ]
+  }
+}

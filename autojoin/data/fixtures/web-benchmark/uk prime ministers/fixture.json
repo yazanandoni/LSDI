@@ -1,0 +1,31 @@
+{
+  "pair_id": "uk prime ministers",
+  "source": {
+    "file": "data/raw/web-benchmark/uk prime ministers/source.csv",
+    "key_columns": [
+      "term",
+      "name",
+      "political party"
+    ]
+  },
+  "target": {
+    "file": "data/raw/web-benchmark/uk prime ministers/target.csv",
+    "key_columns": [
+      "Column_0",
+      "Column_1"
+    ]
+  },
+  "ground_truth": {
+    "file": "data/raw/web-benchmark/uk prime ministers/ground truth.csv",
+    "format": "row_values",
+    "source_key_columns": [
+      "source-term",
+      "source-name",
+      "source-political party"
+    ],
+    "target_key_columns": [
+      "target-Column_0",
+      "target-Column_1"
+    ]
+  }
+}

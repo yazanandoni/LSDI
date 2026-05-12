@@ -1,0 +1,41 @@
+{
+  "pair_id": "california govs 1",
+  "source": {
+    "file": "data/raw/web-benchmark/california govs 1/source.csv",
+    "key_columns": [
+      "Governor's Name",
+      "State",
+      "Time in Office",
+      "Party"
+    ]
+  },
+  "target": {
+    "file": "data/raw/web-benchmark/california govs 1/target.csv",
+    "key_columns": [
+      "Name",
+      "Lifespan",
+      "Political Party",
+      "Years of Service",
+      "Native State",
+      "Notes"
+    ]
+  },
+  "ground_truth": {
+    "file": "data/raw/web-benchmark/california govs 1/ground truth.csv",
+    "format": "row_values",
+    "source_key_columns": [
+      "source-Governor's Name",
+      "source-State",
+      "source-Time in Office",
+      "source-Party"
+    ],
+    "target_key_columns": [
+      "target-Name",
+      "target-Lifespan",
+      "target-Political Party",
+      "target-Years of Service",
+      "target-Native State",
+      "target-Notes"
+    ]
+  }
+}

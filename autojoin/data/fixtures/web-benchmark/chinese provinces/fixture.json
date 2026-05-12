@@ -1,0 +1,47 @@
+{
+  "pair_id": "chinese provinces",
+  "source": {
+    "file": "data/raw/web-benchmark/chinese provinces/source.csv",
+    "key_columns": [
+      "GB",
+      "ISO",
+      "Province",
+      "Chinese Hanyu Pinyin",
+      "Capital",
+      "Abbreviation"
+    ]
+  },
+  "target": {
+    "file": "data/raw/web-benchmark/chinese provinces/target.csv",
+    "key_columns": [
+      "Name",
+      "Hanzi",
+      "Pinyin",
+      "Abbreviation",
+      "Capital",
+      "Hanzi",
+      "Note"
+    ]
+  },
+  "ground_truth": {
+    "file": "data/raw/web-benchmark/chinese provinces/ground truth.csv",
+    "format": "row_values",
+    "source_key_columns": [
+      "source-GB",
+      "source-ISO",
+      "source-Province",
+      "source-Chinese Hanyu Pinyin",
+      "source-Capital",
+      "source-Abbreviation"
+    ],
+    "target_key_columns": [
+      "target-Name",
+      "target-Hanzi",
+      "target-Pinyin",
+      "target-Abbreviation",
+      "target-Capital",
+      "target-Hanzi0",
+      "target-Note"
+    ]
+  }
+}

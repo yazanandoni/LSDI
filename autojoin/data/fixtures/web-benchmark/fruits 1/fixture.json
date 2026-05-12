@@ -1,0 +1,35 @@
+{
+  "pair_id": "fruits 1",
+  "source": {
+    "file": "data/raw/web-benchmark/fruits 1/source.csv",
+    "key_columns": [
+      "FRUITS (raw)",
+      "AMOUNT",
+      "CARBS (grams)"
+    ]
+  },
+  "target": {
+    "file": "data/raw/web-benchmark/fruits 1/target.csv",
+    "key_columns": [
+      "FRUIT CARB CHART",
+      "WEIGHT (g)",
+      "COMMON MEASURE",
+      "CARBOHYDRATE (g)"
+    ]
+  },
+  "ground_truth": {
+    "file": "data/raw/web-benchmark/fruits 1/ground truth.csv",
+    "format": "row_values",
+    "source_key_columns": [
+      "source-FRUITS (raw)",
+      "source-AMOUNT",
+      "source-CARBS (grams)"
+    ],
+    "target_key_columns": [
+      "target-FRUIT CARB CHART",
+      "target-WEIGHT (g)",
+      "target-COMMON MEASURE",
+      "target-CARBOHYDRATE (g)"
+    ]
+  }
+}

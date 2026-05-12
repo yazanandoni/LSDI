@@ -1,0 +1,43 @@
+{
+  "pair_id": "us presidents 6",
+  "source": {
+    "file": "data/raw/web-benchmark/us presidents 6/source.csv",
+    "key_columns": [
+      "OB",
+      "Name",
+      "Birth Name",
+      "OP",
+      "Birthplace",
+      "State of Birth",
+      "AP"
+    ]
+  },
+  "target": {
+    "file": "data/raw/web-benchmark/us presidents 6/target.csv",
+    "key_columns": [
+      "target-President",
+      "Party",
+      "Term as President",
+      "Vice-President"
+    ]
+  },
+  "ground_truth": {
+    "file": "data/raw/web-benchmark/us presidents 6/ground truth.csv",
+    "format": "row_values",
+    "source_key_columns": [
+      "source-OB",
+      "source-Name",
+      "source-Birth Name",
+      "source-OP",
+      "source-Birthplace",
+      "source-State of Birth",
+      "source-AP"
+    ],
+    "target_key_columns": [
+      "target-President",
+      "target-Party",
+      "target-Term as President",
+      "target-Vice-President"
+    ]
+  }
+}

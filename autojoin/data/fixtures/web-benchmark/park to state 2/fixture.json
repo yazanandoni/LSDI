@@ -1,0 +1,43 @@
+{
+  "pair_id": "park to state 2",
+  "source": {
+    "file": "data/raw/web-benchmark/park to state 2/source.csv",
+    "key_columns": [
+      "State",
+      "National Park",
+      "Year Established"
+    ]
+  },
+  "target": {
+    "file": "data/raw/web-benchmark/park to state 2/target.csv",
+    "key_columns": [
+      "Rank",
+      "State",
+      "Percapitaincome",
+      "Medianhouseholdincome",
+      "Medianfamilyincome",
+      "Population",
+      "Numberofhouseholds",
+      "Numberoffamilies"
+    ]
+  },
+  "ground_truth": {
+    "file": "data/raw/web-benchmark/park to state 2/ground truth.csv",
+    "format": "row_values",
+    "source_key_columns": [
+      "source-State",
+      "source-National Park",
+      "source-Year Established"
+    ],
+    "target_key_columns": [
+      "target-Rank",
+      "target-State",
+      "target-Per capita income",
+      "target-Median household income",
+      "target-Median family income",
+      "target-Population",
+      "target-Number of households",
+      "target-Number of families"
+    ]
+  }
+}

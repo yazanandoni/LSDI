@@ -1,0 +1,33 @@
+{
+  "pair_id": "fruits 2",
+  "source": {
+    "file": "data/raw/web-benchmark/fruits 2/source.csv",
+    "key_columns": [
+      "FRUITS (raw)",
+      "AMOUNT",
+      "CARBS (grams)"
+    ]
+  },
+  "target": {
+    "file": "data/raw/web-benchmark/fruits 2/target.csv",
+    "key_columns": [
+      "Per single fruit or the portion stated",
+      "Calories per fruit or the portion stated",
+      "Carbohydrates per fruit or the portion stated"
+    ]
+  },
+  "ground_truth": {
+    "file": "data/raw/web-benchmark/fruits 2/ground truth.csv",
+    "format": "row_values",
+    "source_key_columns": [
+      "source-FRUITS (raw)",
+      "source-AMOUNT",
+      "source-CARBS (grams)"
+    ],
+    "target_key_columns": [
+      "target-Per single fruit or the portion stated",
+      "target-Calories per fruit or the portion stated",
+      "target-Carbohydrates per fruit or the portion stated"
+    ]
+  }
+}
