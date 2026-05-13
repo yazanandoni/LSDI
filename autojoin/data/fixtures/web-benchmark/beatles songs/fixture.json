@@ -1,0 +1,33 @@
+{
+  "pair_id": "beatles songs",
+  "source": {
+    "file": "data/raw/web-benchmark/beatles songs/source.csv",
+    "key_columns": [
+      "Title"
+    ]
+  },
+  "target": {
+    "file": "data/raw/web-benchmark/beatles songs/target.csv",
+    "key_columns": [
+      "Title",
+      "Year",
+      "Album debut",
+      "Songwriter(s)",
+      "Lead vocal(s)"
+    ]
+  },
+  "ground_truth": {
+    "file": "data/raw/web-benchmark/beatles songs/ground truth.csv",
+    "format": "row_values",
+    "source_key_columns": [
+      "source-Title"
+    ],
+    "target_key_columns": [
+      "target-Title",
+      "target-Year",
+      "target-Album debut",
+      "target-Songwriter(s)",
+      "target-Lead vocal(s)"
+    ]
+  }
+}

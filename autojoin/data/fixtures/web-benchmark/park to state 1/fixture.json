@@ -1,0 +1,47 @@
+{
+  "pair_id": "park to state 1",
+  "source": {
+    "file": "data/raw/web-benchmark/park to state 1/source.csv",
+    "key_columns": [
+      "Name",
+      "Location",
+      "Area",
+      "Recreation Visitors (2014)",
+      "Description"
+    ]
+  },
+  "target": {
+    "file": "data/raw/web-benchmark/park to state 1/target.csv",
+    "key_columns": [
+      "Rank",
+      "State",
+      "Percapitaincome",
+      "Medianhouseholdincome",
+      "Medianfamilyincome",
+      "Population",
+      "Numberofhouseholds",
+      "Numberoffamilies"
+    ]
+  },
+  "ground_truth": {
+    "file": "data/raw/web-benchmark/park to state 1/ground truth.csv",
+    "format": "row_values",
+    "source_key_columns": [
+      "source-Name",
+      "source-Location",
+      "source-Area",
+      "source-Recreation Visitors (2014)",
+      "source-Description"
+    ],
+    "target_key_columns": [
+      "target-Rank",
+      "target-State",
+      "target-Per capita income",
+      "target-Median household income",
+      "target-Median family income",
+      "target-Population",
+      "target-Number of households",
+      "target-Number of families"
+    ]
+  }
+}

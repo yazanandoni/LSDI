@@ -1,0 +1,25 @@
+{
+  "pair_id": "sharif email to url",
+  "source": {
+    "file": "data/raw/web-benchmark/sharif email to url/source.csv",
+    "key_columns": [
+      "Email"
+    ]
+  },
+  "target": {
+    "file": "data/raw/web-benchmark/sharif email to url/target.csv",
+    "key_columns": [
+      "Web Address"
+    ]
+  },
+  "ground_truth": {
+    "file": "data/raw/web-benchmark/sharif email to url/ground truth.csv",
+    "format": "row_values",
+    "source_key_columns": [
+      "Email"
+    ],
+    "target_key_columns": [
+      "Web Address"
+    ]
+  }
+}

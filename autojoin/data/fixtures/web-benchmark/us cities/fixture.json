@@ -1,0 +1,31 @@
+{
+  "pair_id": "us cities",
+  "source": {
+    "file": "data/raw/web-benchmark/us cities/source.csv",
+    "key_columns": [
+      "United States Cities"
+    ]
+  },
+  "target": {
+    "file": "data/raw/web-benchmark/us cities/target.csv",
+    "key_columns": [
+      "City",
+      "State/Province",
+      "Country",
+      "Counties"
+    ]
+  },
+  "ground_truth": {
+    "file": "data/raw/web-benchmark/us cities/ground truth.csv",
+    "format": "row_values",
+    "source_key_columns": [
+      "source-United States Cities"
+    ],
+    "target_key_columns": [
+      "target-City",
+      "target-State/Province",
+      "target-Country",
+      "target-Counties"
+    ]
+  }
+}

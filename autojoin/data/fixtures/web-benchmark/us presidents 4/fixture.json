@@ -1,0 +1,47 @@
+{
+  "pair_id": "us presidents 4",
+  "source": {
+    "file": "data/raw/web-benchmark/us presidents 4/source.csv",
+    "key_columns": [
+      "\u2116",
+      "President",
+      "State",
+      "Term of office",
+      "Party",
+      "Term;",
+      "Previous office",
+      "Vice President",
+      "Vice President"
+    ]
+  },
+  "target": {
+    "file": "data/raw/web-benchmark/us presidents 4/target.csv",
+    "key_columns": [
+      "State",
+      "Presidents per state",
+      "Presidents",
+      "#th President"
+    ]
+  },
+  "ground_truth": {
+    "file": "data/raw/web-benchmark/us presidents 4/ground truth.csv",
+    "format": "row_values",
+    "source_key_columns": [
+      "source-\u2116",
+      "source-President",
+      "source-State",
+      "source-Term of office",
+      "source-Party",
+      "source-Term;",
+      "source-Previous office",
+      "source-Vice President",
+      "source-Vice President0"
+    ],
+    "target_key_columns": [
+      "target-State",
+      "target-Presidents per state",
+      "target-Presidents",
+      "target-#th President"
+    ]
+  }
+}

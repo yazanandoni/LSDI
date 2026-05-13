@@ -1,0 +1,33 @@
+{
+  "pair_id": "new york govs 1",
+  "source": {
+    "file": "data/raw/web-benchmark/new york govs 1/source.csv",
+    "key_columns": [
+      "Name",
+      "Held Office",
+      "Political Party"
+    ]
+  },
+  "target": {
+    "file": "data/raw/web-benchmark/new york govs 1/target.csv",
+    "key_columns": [
+      "#",
+      "Name (Tenure)",
+      "Party"
+    ]
+  },
+  "ground_truth": {
+    "file": "data/raw/web-benchmark/new york govs 1/ground truth.csv",
+    "format": "row_values",
+    "source_key_columns": [
+      "source-Name",
+      "source-Held Office",
+      "source-Political Party"
+    ],
+    "target_key_columns": [
+      "target-#",
+      "target-Name (Tenure)",
+      "target-Party"
+    ]
+  }
+}
