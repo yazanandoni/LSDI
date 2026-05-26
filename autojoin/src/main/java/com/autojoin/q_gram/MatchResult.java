@@ -14,4 +14,9 @@ public class MatchResult {
         this.bestSourceRows = bestSourceRows;
         this.bestTargetRows = bestTargetRows;
     }
+
+    public String getQGram() { return qGram; }
+    public double getScore() { return score; }
+    public List<Integer> getBestSourceRows() { return bestSourceRows; }
+    public List<Integer> getBestTargetRows() { return bestTargetRows; }
 }
