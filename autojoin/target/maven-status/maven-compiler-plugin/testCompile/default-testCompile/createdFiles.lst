@@ -1,0 +1,8 @@
+com\autojoin\synthesis\BenchmarkTestHelper.class
+com\autojoin\synthesis\BenchmarkFixture$Target.class
+com\autojoin\synthesis\BenchmarkFixture$Source.class
+com\autojoin\synthesis\TransformationSynthesizerTest.class
+com\autojoin\synthesis\BenchmarkIntegrationTest.class
+com\autojoin\synthesis\AutoJoinIntegrationTest.class
+com\autojoin\synthesis\BenchmarkFixture.class
+com\autojoin\synthesis\BenchmarkFixture$GroundTruth.class

@@ -1,0 +1,9 @@
+com\autojoin\synthesis\TransformationSynthesizer$OperatorPlacement.class
+com\autojoin\synthesis\CandidateGenerator.class
+com\autojoin\synthesis\TransformationSynthesizer.class
+com\autojoin\synthesis\TransformationLearner$LearnedTransformation.class
+com\autojoin\synthesis\ExamplePair.class
+com\autojoin\synthesis\TransformationLearner.class
+com\autojoin\synthesis\CandidateGenerator$ScoredOp.class
+com\autojoin\synthesis\TransformationSynthesizer$Side.class
+com\autojoin\synthesis\TransformationProgram.class
