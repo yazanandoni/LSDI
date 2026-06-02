@@ -80,6 +80,12 @@
   font-size: 1.1rem;
 }
 
+.duration-stats {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(15, 76, 92, 0.1);
+}
+
 .diag {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
@@ -131,6 +137,12 @@
 
 .direction {
   margin: 0.2rem 0 0;
+}
+
+.duration {
+  margin: 0.2rem 0 0;
+  font-size: 0.75rem;
+  color: var(--ink-500);
 }
 
 .helper {

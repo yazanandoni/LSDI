@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { DecimalPipe, NgFor, NgIf, SlicePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { BenchmarkService } from '../../services/benchmark.service';
@@ -13,7 +13,7 @@ import * as echarts from 'echarts/core';
   templateUrl: './results.component.html',
   styleUrl: './results.component.scss'
 })
-export class ResultsComponent implements OnInit {
+export class ResultsComponent implements OnInit, OnDestroy {
   results: BenchmarkSummaryView[] = [];
   selectedResult: BenchmarkSummaryView | null = null;
   precisionRecallChart?: echarts.ECharts;
@@ -29,6 +29,11 @@ export class ResultsComponent implements OnInit {
     });
   }
 
+  ngOnDestroy(): void {
+    this.precisionRecallChart?.dispose();
+    this.matchBreakdownChart?.dispose();
+  }
+
   selectResult(result: BenchmarkSummaryView): void {
     this.selectedResult = result;
     this.updateCharts();
@@ -36,21 +41,28 @@ export class ResultsComponent implements OnInit {
 
   private updateCharts(): void {
     if (!this.selectedResult) return;
-    const precision = this.selectedResult.precision ?? 0;
-    const recall = this.selectedResult.recall ?? 0;
-    const mismatches = this.selectedResult.mismatches.length;
-    const tp = this.selectedResult.truePositives;
 
-    const precisionEl = document.getElementById('precisionChart');
-    const breakdownEl = document.getElementById('breakdownChart');
+    setTimeout(() => {
+      const r = this.selectedResult!;
+      const precision = r.precision ?? 0;
+      const recall = r.recall ?? 0;
+      const mismatches = r.mismatches.length;
+      const tp = r.truePositives;
 
-    if (precisionEl) {
-      this.precisionRecallChart = echarts.init(precisionEl);
-      this.precisionRecallChart.setOption(buildPrecisionRecallOption(precision, recall));
-    }
-    if (breakdownEl) {
-      this.matchBreakdownChart = echarts.init(breakdownEl);
-      this.matchBreakdownChart.setOption(buildMatchBreakdownOption(tp, mismatches));
-    }
+      this.precisionRecallChart?.dispose();
+      this.matchBreakdownChart?.dispose();
+
+      const precisionEl = document.getElementById('precisionChart');
+      const breakdownEl = document.getElementById('breakdownChart');
+
+      if (precisionEl) {
+        this.precisionRecallChart = echarts.init(precisionEl);
+        this.precisionRecallChart.setOption(buildPrecisionRecallOption(precision, recall));
+      }
+      if (breakdownEl) {
+        this.matchBreakdownChart = echarts.init(breakdownEl);
+        this.matchBreakdownChart.setOption(buildMatchBreakdownOption(tp, mismatches));
+      }
+    });
   }
 }

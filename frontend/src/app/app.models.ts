@@ -31,6 +31,7 @@ export interface BenchmarkSummaryView {
   groundTruthPairs: number;
   precision: number;
   recall: number;
+  durationMs: number;
   transformation: string | null;
   mismatches: Mismatch[];
 }

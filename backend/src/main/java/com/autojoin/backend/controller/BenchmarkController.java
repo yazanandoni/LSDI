@@ -84,6 +84,7 @@ public class BenchmarkController {
         return new BenchmarkSummaryView(
                 id, summary.pairId(), summary.direction(),
                 summary.truePositives(), summary.joinedPairs(), summary.groundTruthPairs(),
-                summary.precision(), summary.recall(), summary.transformation(), summary.mismatches());
+                summary.precision(), summary.recall(), summary.durationMs(),
+                summary.transformation(), summary.mismatches());
     }
 }

@@ -18,6 +18,7 @@
         <div>
           <p class="label">{{ result.pairId }}</p>
           <p class="direction">{{ result.direction }}</p>
+          <p class="duration">{{ result.durationMs }}ms</p>
         </div>
         <div class="metrics">
           <span>P {{ result.precision | number: '1.2-2' }}</span>
@@ -45,6 +46,12 @@
           <div>
             <span>True positives</span>
             <strong>{{ selectedResult.truePositives }}</strong>
+          </div>
+        </div>
+        <div class="stats duration-stats">
+          <div>
+            <span>Duration</span>
+            <strong>{{ selectedResult.durationMs }}ms</strong>
           </div>
         </div>
       </div>

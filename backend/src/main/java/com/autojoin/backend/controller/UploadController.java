@@ -46,7 +46,7 @@ public class UploadController {
 
             if (result == null || result.isEmpty()) {
                 return ResponseEntity.ok(new BenchmarkSummary(
-                        "upload", "unknown", 0, 0, 0, 0.0, 0.0, null, List.of()));
+                        "upload", "unknown", 0, 0, 0, 0.0, 0.0, 0L, null, List.of()));
             }
 
             List<Mismatch> mismatches = new ArrayList<>();
@@ -61,7 +61,7 @@ public class UploadController {
 
             BenchmarkSummary summary = new BenchmarkSummary(
                     "upload", "source -> target", tp, result.size(), 0,
-                    1.0, 1.0, result.getTransformationDescription(), mismatches);
+                    1.0, 1.0, 0L, result.getTransformationDescription(), mismatches);
 
             String resultId = resultStore.save(summary);
             return ResponseEntity.ok(summary);

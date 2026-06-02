@@ -11,6 +11,7 @@ public record BenchmarkSummaryView(
         int groundTruthPairs,
         double precision,
         double recall,
+        long durationMs,
         String transformation,
         List<Mismatch> mismatches
 ) {

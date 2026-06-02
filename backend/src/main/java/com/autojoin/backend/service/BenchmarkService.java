@@ -67,6 +67,7 @@ public class BenchmarkService {
     }
 
     public BenchmarkSummary runBenchmark(String pairId) throws IOException {
+        long start = System.currentTimeMillis();
         BenchmarkFixture fixture = fixtureLoader.loadFixture(pairId);
         Table sourceTable = loadTable(fixture.source.file, fixture.source.key_columns);
         Table targetTable = loadTable(fixture.target.file, fixture.target.key_columns);
@@ -76,8 +77,9 @@ public class BenchmarkService {
         Map<String, List<String>> gtMap = loadGroundTruth(gtCsvPath, numSrcGtCols);
 
         JoinResult result = autoJoin.join(sourceTable, targetTable);
+        long elapsed = System.currentTimeMillis() - start;
         if (result == null || result.isEmpty()) {
-            return new BenchmarkSummary(pairId, "unknown", 0, 0, gtMap.size(), 0.0, 0.0, null, List.of());
+            return new BenchmarkSummary(pairId, "unknown", 0, 0, gtMap.size(), 0.0, 0.0, elapsed, null, List.of());
         }
 
         List<String> srcKeyCols = fixture.source.key_columns;
@@ -104,7 +106,7 @@ public class BenchmarkService {
         double recall = gtPairs == 0 ? 0.0 : (double) tp / gtPairs;
         String dirLabel = forward ? "source -> target" : "target -> source";
 
-        return new BenchmarkSummary(pairId, dirLabel, tp, result.size(), gtPairs, precision, recall,
+        return new BenchmarkSummary(pairId, dirLabel, tp, result.size(), gtPairs, precision, recall, elapsed,
                 result.getTransformationDescription(), mismatches);
     }
 
