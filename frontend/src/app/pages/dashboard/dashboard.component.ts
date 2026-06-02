@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { NgFor, NgIf, DecimalPipe } from '@angular/common';
 import { BenchmarkService } from '../../services/benchmark.service';
 import { BenchmarkSummaryView } from '../../app.models';
@@ -13,13 +13,17 @@ import { BenchmarkSummaryView } from '../../app.models';
 })
 export class DashboardComponent implements OnInit {
   recentResults: BenchmarkSummaryView[] = [];
+  running = false;
   summaryStats = {
     totalRuns: 0,
     avgPrecision: 0,
     avgRecall: 0
   };
 
-  constructor(private benchmarkService: BenchmarkService) {}
+  constructor(
+    private benchmarkService: BenchmarkService,
+    private router: Router
+  ) {}
 
   ngOnInit(): void {
     this.benchmarkService.listResults().subscribe((results) => {
@@ -32,6 +36,19 @@ export class DashboardComponent implements OnInit {
           avgPrecision: precisionSum / results.length,
           avgRecall: recallSum / results.length
         };
+      }
+    });
+  }
+
+  runAll(): void {
+    this.running = true;
+    this.benchmarkService.runAllBenchmarks().subscribe({
+      next: () => {
+        this.running = false;
+        this.router.navigate(['/results']);
+      },
+      error: () => {
+        this.running = false;
       }
     });
   }

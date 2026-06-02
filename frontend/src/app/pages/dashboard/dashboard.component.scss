@@ -130,6 +130,11 @@
   background: var(--ocean-700);
 }
 
+.btn--primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .btn--ghost {
   border-color: var(--ocean-500);
   color: var(--ocean-500);

@@ -1,5 +1,6 @@
 package com.autojoin.backend.controller;
 
+import com.autojoin.backend.model.BatchRunRequest;
 import com.autojoin.backend.model.BenchmarkDescriptor;
 import com.autojoin.backend.model.BenchmarkRunRequest;
 import com.autojoin.backend.model.BenchmarkSummary;
@@ -41,7 +42,28 @@ public class BenchmarkController {
             throws IOException {
         BenchmarkSummary summary = benchmarkService.runBenchmark(request.pairId());
         String resultId = resultStore.save(summary);
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(new ResultIdResponse(resultId));
+        return ResponseEntity.ok(new ResultIdResponse(resultId));
+    }
+
+    @PostMapping("/benchmarks/run-all")
+    public ResponseEntity<List<ResultIdResponse>> runAllBenchmarks() throws IOException {
+        List<BenchmarkDescriptor> all = benchmarkService.listBenchmarks();
+        List<String> pairIds = all.stream().map(BenchmarkDescriptor::pairId).toList();
+        List<BenchmarkSummary> summaries = benchmarkService.runBenchmarks(pairIds);
+        List<ResultIdResponse> ids = summaries.stream()
+                .map(s -> new ResultIdResponse(resultStore.save(s)))
+                .toList();
+        return ResponseEntity.ok(ids);
+    }
+
+    @PostMapping("/benchmarks/run-batch")
+    public ResponseEntity<List<ResultIdResponse>> runBatch(@RequestBody BatchRunRequest request)
+            throws IOException {
+        List<BenchmarkSummary> summaries = benchmarkService.runBenchmarks(request.pairIds());
+        List<ResultIdResponse> ids = summaries.stream()
+                .map(s -> new ResultIdResponse(resultStore.save(s)))
+                .toList();
+        return ResponseEntity.ok(ids);
     }
 
     @GetMapping("/results/{id}")

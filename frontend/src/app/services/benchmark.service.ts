@@ -4,7 +4,6 @@ import { Observable } from 'rxjs';
 import { API_BASE_URL } from '../core/api.config';
 import {
   BenchmarkDescriptor,
-  BenchmarkRunRequest,
   BenchmarkSummaryView,
   ResultIdResponse
 } from '../app.models';
@@ -18,8 +17,15 @@ export class BenchmarkService {
   }
 
   runBenchmark(pairId: string): Observable<ResultIdResponse> {
-    const payload: BenchmarkRunRequest = { pairId };
-    return this.http.post<ResultIdResponse>(`${API_BASE_URL}/benchmarks/run`, payload);
+    return this.http.post<ResultIdResponse>(`${API_BASE_URL}/benchmarks/run`, { pairId });
+  }
+
+  runAllBenchmarks(): Observable<ResultIdResponse[]> {
+    return this.http.post<ResultIdResponse[]>(`${API_BASE_URL}/benchmarks/run-all`, {});
+  }
+
+  runBatch(pairIds: string[]): Observable<ResultIdResponse[]> {
+    return this.http.post<ResultIdResponse[]>(`${API_BASE_URL}/benchmarks/run-batch`, { pairIds });
   }
 
   listResults(): Observable<BenchmarkSummaryView[]> {

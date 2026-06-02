@@ -7,6 +7,8 @@ import com.autojoin.backend.model.BenchmarkSummary;
 import com.autojoin.backend.model.Mismatch;
 import com.autojoin.model.Row;
 import com.autojoin.model.Table;
+import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.FileReader;
@@ -23,32 +25,42 @@ import java.util.stream.Collectors;
 
 @Service
 public class BenchmarkService {
-    private static final Path FIXTURE_DIR = Paths.get("data/fixtures/web-benchmark");
-    private final BenchmarkFixtureLoader fixtureLoader = new BenchmarkFixtureLoader();
+    private final Path dataRoot;
+    private final Path fixtureDir;
+    private final BenchmarkFixtureLoader fixtureLoader;
     private final AutoJoin autoJoin = new AutoJoin();
 
-    public List<BenchmarkDescriptor> listBenchmarks() throws IOException {
-        if (!Files.exists(FIXTURE_DIR)) {
-            return List.of();
+    public BenchmarkService(@Value("${app.data-root:}") String dataRootStr) {
+        String root = dataRootStr;
+        if (root.isEmpty()) {
+            root = Files.exists(Paths.get("autojoin/data")) ? "autojoin" : ".";
         }
+        this.dataRoot = Paths.get(root);
+        this.fixtureDir = this.dataRoot.resolve("data/fixtures/web-benchmark");
+        this.fixtureLoader = new BenchmarkFixtureLoader(fixtureDir);
+    }
+
+    @PostConstruct
+    public void init() {
+        System.out.println("BenchmarkService: dataRoot=" + dataRoot.toAbsolutePath()
+                + ", has data dir=" + Files.exists(fixtureDir));
+    }
+
+    public List<BenchmarkDescriptor> listBenchmarks() throws IOException {
+        if (!Files.exists(fixtureDir)) return List.of();
         List<BenchmarkDescriptor> benchmarks = new ArrayList<>();
-        try (var paths = Files.list(FIXTURE_DIR)) {
+        try (var paths = Files.list(fixtureDir)) {
             for (Path fixturePath : paths.toList()) {
                 if (!Files.isDirectory(fixturePath)) continue;
                 String pairId = fixturePath.getFileName().toString();
                 if (pairId.startsWith("_")) continue;
                 BenchmarkFixture fixture = fixtureLoader.loadFixture(pairId);
-                Table sourceTable = loadTable(fixture.source.file, "source-" + pairId, fixture.source.key_columns);
-                Table targetTable = loadTable(fixture.target.file, "target-" + pairId, fixture.target.key_columns);
-                benchmarks.add(new BenchmarkDescriptor(
-                        pairId,
-                        sourceTable.numRows(),
-                        sourceTable.numColumns(),
-                        targetTable.numRows(),
-                        targetTable.numColumns(),
-                        fixture.source.key_columns,
-                        fixture.target.key_columns
-                ));
+                Table sourceTable = loadTable(fixture.source.file, fixture.source.key_columns);
+                Table targetTable = loadTable(fixture.target.file, fixture.target.key_columns);
+                benchmarks.add(new BenchmarkDescriptor(pairId,
+                        sourceTable.numRows(), sourceTable.numColumns(),
+                        targetTable.numRows(), targetTable.numColumns(),
+                        fixture.source.key_columns, fixture.target.key_columns));
             }
         }
         return benchmarks;
@@ -56,22 +68,22 @@ public class BenchmarkService {
 
     public BenchmarkSummary runBenchmark(String pairId) throws IOException {
         BenchmarkFixture fixture = fixtureLoader.loadFixture(pairId);
-        Table sourceTable = loadTable(fixture.source.file, "source-" + pairId, fixture.source.key_columns);
-        Table targetTable = loadTable(fixture.target.file, "target-" + pairId, fixture.target.key_columns);
+        Table sourceTable = loadTable(fixture.source.file, fixture.source.key_columns);
+        Table targetTable = loadTable(fixture.target.file, fixture.target.key_columns);
 
-        Path gtCsvPath = Paths.get("").resolve(fixture.ground_truth.file);
+        Path gtCsvPath = resolvePath(fixture.ground_truth.file);
         int numSrcGtCols = fixture.ground_truth.source_key_columns.size();
         Map<String, List<String>> gtMap = loadGroundTruth(gtCsvPath, numSrcGtCols);
-
-        List<String> srcKeyCols = fixture.source.key_columns;
-        List<String> tgtKeyCols = fixture.target.key_columns;
 
         JoinResult result = autoJoin.join(sourceTable, targetTable);
         if (result == null || result.isEmpty()) {
             return new BenchmarkSummary(pairId, "unknown", 0, 0, gtMap.size(), 0.0, 0.0, null, List.of());
         }
 
+        List<String> srcKeyCols = fixture.source.key_columns;
+        List<String> tgtKeyCols = fixture.target.key_columns;
         boolean forward = isForwardDirection(result, srcKeyCols);
+
         int tp = 0;
         List<Mismatch> mismatches = new ArrayList<>();
         for (Row[] pair : result.getJoinedPairs()) {
@@ -96,9 +108,21 @@ public class BenchmarkService {
                 result.getTransformationDescription(), mismatches);
     }
 
-    private Table loadTable(String relativePath, String name, List<String> keyColumns) throws IOException {
-        try (FileReader reader = new FileReader(relativePath)) {
-            return Table.fromCsv(name, reader, keyColumns);
+    public List<BenchmarkSummary> runBenchmarks(List<String> pairIds) throws IOException {
+        List<BenchmarkSummary> summaries = new ArrayList<>();
+        for (String pairId : pairIds) {
+            summaries.add(runBenchmark(pairId));
+        }
+        return summaries;
+    }
+
+    private Path resolvePath(String relativePath) {
+        return dataRoot.resolve(relativePath);
+    }
+
+    private Table loadTable(String relativePath, List<String> keyColumns) throws IOException {
+        try (FileReader reader = new FileReader(resolvePath(relativePath).toFile())) {
+            return Table.fromCsv("t", reader, keyColumns);
         }
     }
 
@@ -131,9 +155,9 @@ public class BenchmarkService {
         boolean inQuotes = false;
         for (int i = 0; i < line.length(); i++) {
             char c = line.charAt(i);
-            if (c == '"') { inQuotes = !inQuotes; }
+            if (c == '"') inQuotes = !inQuotes;
             else if (c == ',' && !inQuotes) { fields.add(sb.toString().trim()); sb.setLength(0); }
-            else { sb.append(c); }
+            else sb.append(c);
         }
         fields.add(sb.toString().trim());
         return fields.toArray(new String[0]);

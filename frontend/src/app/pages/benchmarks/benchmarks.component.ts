@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { NgFor, NgIf } from '@angular/common';
+import { Router } from '@angular/router';
 import { BenchmarkService } from '../../services/benchmark.service';
 import { BenchmarkDescriptor } from '../../app.models';
 
@@ -12,11 +13,14 @@ import { BenchmarkDescriptor } from '../../app.models';
 })
 export class BenchmarksComponent implements OnInit {
   benchmarks: BenchmarkDescriptor[] = [];
-  selectedPairId: string | null = null;
-  resultId: string | null = null;
+  selectedIds = new Set<string>();
+  running = false;
   statusMessage = '';
 
-  constructor(private benchmarkService: BenchmarkService) {}
+  constructor(
+    private benchmarkService: BenchmarkService,
+    private router: Router
+  ) {}
 
   ngOnInit(): void {
     this.benchmarkService.listBenchmarks().subscribe((benchmarks) => {
@@ -24,12 +28,51 @@ export class BenchmarksComponent implements OnInit {
     });
   }
 
-  runBenchmark(pairId: string): void {
-    this.selectedPairId = pairId;
-    this.statusMessage = 'Running benchmark...';
-    this.benchmarkService.runBenchmark(pairId).subscribe((response) => {
-      this.resultId = response.resultId;
-      this.statusMessage = `Run complete. Result id: ${response.resultId}`;
+  toggleSelection(pairId: string): void {
+    if (this.selectedIds.has(pairId)) {
+      this.selectedIds.delete(pairId);
+    } else {
+      this.selectedIds.add(pairId);
+    }
+  }
+
+  runSelected(): void {
+    const ids = Array.from(this.selectedIds);
+    if (ids.length === 0) return;
+    this.running = true;
+    this.statusMessage = `Running ${ids.length} benchmark(s)...`;
+    this.benchmarkService.runBatch(ids).subscribe({
+      next: () => {
+        this.running = false;
+        this.router.navigate(['/results']);
+      },
+      error: (err) => {
+        this.running = false;
+        this.statusMessage = 'Error: ' + (err.message || 'failed to run');
+      }
     });
+  }
+
+  runSingle(pairId: string): void {
+    this.running = true;
+    this.statusMessage = `Running ${pairId}...`;
+    this.benchmarkService.runBenchmark(pairId).subscribe({
+      next: () => {
+        this.running = false;
+        this.router.navigate(['/results']);
+      },
+      error: (err) => {
+        this.running = false;
+        this.statusMessage = 'Error: ' + (err.message || 'failed to run');
+      }
+    });
+  }
+
+  selectAll(): void {
+    this.benchmarks.forEach(b => this.selectedIds.add(b.pairId));
+  }
+
+  deselectAll(): void {
+    this.selectedIds.clear();
   }
 }

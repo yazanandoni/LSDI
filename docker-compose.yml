@@ -6,8 +6,9 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./autojoin/data:/app/data
+      - ./autojoin/data:/app/autojoin/data
     environment:
+      - APP_DATA_ROOT=autojoin
       - JAVA_OPTS=-Xms256m -Xmx512m
 
   frontend:
