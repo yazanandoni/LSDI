@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { DecimalPipe, NgFor, NgIf, SlicePipe } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import { BenchmarkService } from '../../services/benchmark.service';
 import { BenchmarkSummaryView } from '../../app.models';
 import { buildMatchBreakdownOption, buildPrecisionRecallOption } from './results-charts';
@@ -8,7 +9,7 @@ import * as echarts from 'echarts/core';
 @Component({
   selector: 'app-results',
   standalone: true,
-  imports: [DecimalPipe, NgFor, NgIf, SlicePipe],
+  imports: [RouterLink, DecimalPipe, NgFor, NgIf, SlicePipe],
   templateUrl: './results.component.html',
   styleUrl: './results.component.scss'
 })

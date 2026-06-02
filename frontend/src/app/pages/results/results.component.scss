@@ -2,6 +2,18 @@
   padding: 2rem 0;
 }
 
+.back-link {
+  display: inline-block;
+  font-size: 0.85rem;
+  color: var(--ocean-500);
+  margin-bottom: 0.75rem;
+  font-weight: 500;
+}
+
+.back-link:hover {
+  text-decoration: underline;
+}
+
 .section__header {
   display: flex;
   justify-content: space-between;

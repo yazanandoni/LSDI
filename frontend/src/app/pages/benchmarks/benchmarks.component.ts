@@ -1,13 +1,13 @@
 import { Component, OnInit } from '@angular/core';
 import { NgFor, NgIf } from '@angular/common';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { BenchmarkService } from '../../services/benchmark.service';
 import { BenchmarkDescriptor } from '../../app.models';
 
 @Component({
   selector: 'app-benchmarks',
   standalone: true,
-  imports: [NgFor, NgIf],
+  imports: [RouterLink, NgFor, NgIf],
   templateUrl: './benchmarks.component.html',
   styleUrl: './benchmarks.component.scss'
 })
