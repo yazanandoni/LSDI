@@ -1,0 +1,154 @@
+.section {
+  padding: 2rem 0;
+}
+
+.section__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+.layout {
+  grid-template-columns: minmax(240px, 320px) 1fr;
+}
+
+.results-list {
+  padding: 1.5rem;
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+}
+
+.results-list__item {
+  padding: 0.9rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(15, 76, 92, 0.12);
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.results-list__item--active {
+  background: rgba(15, 76, 92, 0.08);
+  border-color: rgba(15, 76, 92, 0.3);
+}
+
+.results-detail {
+  padding: 1.5rem;
+  display: grid;
+  gap: 1.5rem;
+}
+
+.results-detail__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1rem;
+}
+
+.stats span {
+  display: block;
+  color: var(--ink-500);
+  font-size: 0.75rem;
+  margin-bottom: 0.3rem;
+}
+
+.stats strong {
+  font-size: 1.1rem;
+}
+
+.diag {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.charts {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.chart {
+  padding: 0.5rem;
+  min-height: 260px;
+}
+
+.chart__canvas {
+  width: 100%;
+  height: 240px;
+}
+
+.diag__panel {
+  padding: 1rem;
+  background: rgba(244, 162, 97, 0.08);
+}
+
+.mismatch-table {
+  padding: 1.2rem;
+}
+
+.mismatch {
+  padding: 0.9rem 0;
+  border-bottom: 1px dashed rgba(15, 76, 92, 0.2);
+}
+
+.mismatch:last-child {
+  border-bottom: none;
+}
+
+.mono {
+  font-family: "Space Mono", monospace;
+  font-size: 0.85rem;
+}
+
+.label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-500);
+  font-size: 0.7rem;
+  margin: 0;
+}
+
+.direction {
+  margin: 0.2rem 0 0;
+}
+
+.helper {
+  color: var(--ink-500);
+  margin: 0;
+}
+
+.metrics {
+  display: grid;
+  gap: 0.4rem;
+  color: var(--ink-500);
+  font-size: 0.8rem;
+}
+
+.empty {
+  padding: 2rem;
+  text-align: center;
+  color: var(--ink-500);
+}
+
+.eyebrow {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ocean-500);
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
