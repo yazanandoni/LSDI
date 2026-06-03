@@ -47,29 +47,100 @@ import java.util.Set;
  */
 public class TransformationSynthesizer {
 
-    /** Cache of solved sub-searches: target-remainder state -> learned program. */
+    /**
+     * Maximum number of logical operators allowed in a learned program (the
+     * paper's tau bound, Section 3.2). Without this bound the search never
+     * terminates on non-joinable column pairs: row-independent Constant
+     * operators can always "make progress" by emitting one chunk of the target
+     * at a time, so the recursion builds unboundedly long constant-only
+     * programs. The paper reports tau = 10 is empirically sufficient.
+     */
+    private static final int MAX_OPERATORS = 10;
+
+    /**
+     * Hard safeguard on the number of search nodes explored per learning
+     * attempt. The tau bound guarantees termination but not interactive speed:
+     * on a non-joinable column pair the bounded search can still enumerate an
+     * enormous number of partial programs. When the cap is hit we abandon the
+     * attempt (returning no program), which is the correct outcome for a pair
+     * that does not actually join.
+     */
+    private static final int MAX_NODES = 200_000;
+
+    /**
+     * Wall-clock budget per learning attempt. The dominant cost on non-joinable
+     * column pairs is not node count but per-node candidate generation, which
+     * blows up on long, separator-rich strings (e.g. matching a song title
+     * against a multi-word "Songwriter(s)" value). A real transformation is
+     * found in well under this budget; exceeding it means the pair does not
+     * join, so we abandon the attempt.
+     */
+    private static final long BUDGET_NANOS = 800_000_000L; // 0.8 seconds
+
+    /** Cache of solved sub-searches: (state, budget) -> learned program. */
     private Map<String, TransformationProgram> solved;
-    /** Cache of sub-searches proven to have no consistent program. */
+    /** Cache of (state, budget) sub-searches proven to have no consistent program. */
     private Set<String> failed;
+    /** Number of search nodes visited in the current attempt. */
+    private int nodesVisited;
+    /** Nano-time deadline for the current attempt. */
+    private long deadlineNanos;
+    /** Whether the most recent attempt was cut short by the node/time guard. */
+    private boolean lastAborted;
+
+    /** Thrown to unwind the recursion immediately when {@link #MAX_NODES} is hit. */
+    private static final class SearchAbortedException extends RuntimeException {
+        SearchAbortedException() { super(null, null, false, false); }
+    }
 
     /**
      * Attempt to learn a transformation from the given examples.
      *
      * @return the learned program, or null if no consistent program was found.
      */
+    /** Search nodes visited during the most recent {@link #tryLearnTransform} call (diagnostics). */
+    int lastNodesVisited() { return nodesVisited; }
+
+    /**
+     * Whether the most recent attempt was abandoned at the node/time guard
+     * (rather than failing fast). Repeated aborts on a column pair indicate it
+     * does not join, so callers can stop trying further subsets of that pair.
+     */
+    boolean lastAttemptAborted() { return lastAborted; }
+
     public TransformationProgram tryLearnTransform(List<ExamplePair> examples) {
         // Fresh memo per top-level attempt: the source rows differ between
         // attempts, so cached results must not leak across them.
         solved = new HashMap<>();
         failed = new HashSet<>();
-        return search(examples);
+        nodesVisited = 0;
+        deadlineNanos = System.nanoTime() + BUDGET_NANOS;
+        lastAborted = false;
+        try {
+            return search(examples, MAX_OPERATORS);
+        } catch (SearchAbortedException aborted) {
+            lastAborted = true;
+            return null; // node/time guard hit: treat as "no transformation found"
+        }
     }
 
     // -------------------------------------------------------------------------
     // Core recursive routine
     // -------------------------------------------------------------------------
 
-    private TransformationProgram search(List<ExamplePair> examples) {
+    /**
+     * @param budget the maximum number of operators the returned program may
+     *               use (the remaining tau budget for this sub-search).
+     */
+    private TransformationProgram search(List<ExamplePair> examples, int budget) {
+        // Abort on either guard: node count or wall-clock budget. nanoTime() is
+        // negligible next to a single node's candidate generation, so we check
+        // it every node — this catches per-node cost blowups (long, separator-
+        // rich strings) that the node cap alone cannot.
+        if (++nodesVisited > MAX_NODES || System.nanoTime() > deadlineNanos) {
+            throw new SearchAbortedException();
+        }
+
         // Base case: all target remainders are empty -> the empty program is correct.
         if (examples.stream().allMatch(ex -> ex.targetValue.isEmpty())) {
             return new TransformationProgram(List.of());
@@ -78,6 +149,9 @@ public class TransformationSynthesizer {
         // Any empty target remainder with a non-empty one is inconsistent.
         boolean anyEmpty = examples.stream().anyMatch(ex -> ex.targetValue.isEmpty());
         if (anyEmpty) return null;
+
+        // tau bound: target is non-empty but no operator budget remains.
+        if (budget <= 0) return null;
 
         // Appendix G: shared-character backtrack. If some example's source row
         // shares no character with its target remainder, no Substr/Split operator
@@ -90,13 +164,15 @@ public class TransformationSynthesizer {
         }
 
         // Memo lookup: the source rows are constant, so the list of target
-        // remainders uniquely identifies this sub-search.
-        String state = stateKey(examples);
+        // remainders identifies this sub-search. The budget is part of the key
+        // because a state unsolvable within a small budget may be solvable with
+        // a larger one (and vice-versa for cached solutions that exceed it).
+        String state = stateKey(examples) + "#" + budget;
         TransformationProgram cached = solved.get(state);
         if (cached != null) return cached;
         if (failed.contains(state)) return null;
 
-        TransformationProgram result = searchUncached(examples);
+        TransformationProgram result = searchUncached(examples, budget);
 
         if (result != null) {
             solved.put(state, result);
@@ -106,7 +182,7 @@ public class TransformationSynthesizer {
         return result;
     }
 
-    private TransformationProgram searchUncached(List<ExamplePair> examples) {
+    private TransformationProgram searchUncached(List<ExamplePair> examples, int budget) {
         List<LogicalOperator> candidates = CandidateGenerator.generate(examples);
 
         for (LogicalOperator op : candidates) {
@@ -114,14 +190,32 @@ public class TransformationSynthesizer {
             List<OperatorPlacement> placements = findPlacements(op, examples);
             if (placements == null) continue;
 
-            // Build left-remainder examples (what is to the LEFT of the match).
+            // This op consumes one unit of budget; the left and right
+            // sub-programs must fit in what remains.
+            int childBudget = budget - 1;
+
             List<ExamplePair> leftExamples = buildRemainders(examples, placements, Side.LEFT);
-            TransformationProgram leftProg = search(leftExamples);
+            List<ExamplePair> rightExamples = buildRemainders(examples, placements, Side.RIGHT);
+
+            // Best-progress upper-bound early termination (Appendix G). This op
+            // covers one contiguous chunk; whatever it leaves to its left and
+            // right still needs at least one more operator each. So a lower bound
+            // on the operators this branch needs is 1 + (left non-empty?) +
+            // (right non-empty?). If that already exceeds the remaining budget,
+            // the branch cannot possibly close — skip it before paying for the
+            // (potentially deep) left/right recursion.
+            int minOpsNeeded = 1
+                    + (anyNonEmptyTarget(leftExamples) ? 1 : 0)
+                    + (anyNonEmptyTarget(rightExamples) ? 1 : 0);
+            if (minOpsNeeded > budget) continue;
+
+            // Solve the LEFT remainder first.
+            TransformationProgram leftProg = search(leftExamples, childBudget);
             if (leftProg == null) continue;
 
-            // Build right-remainder examples (what is to the RIGHT of the match).
-            List<ExamplePair> rightExamples = buildRemainders(examples, placements, Side.RIGHT);
-            TransformationProgram rightProg = search(rightExamples);
+            // Then the RIGHT remainder, with the budget left over after the op
+            // and the left sub-program.
+            TransformationProgram rightProg = search(rightExamples, childBudget - leftProg.getOperators().size());
             if (rightProg == null) continue;
 
             // Compose: left_ops + [op] + right_ops
@@ -159,6 +253,14 @@ public class TransformationSynthesizer {
                 }
             }
             if (disjoint) return true;
+        }
+        return false;
+    }
+
+    /** True if any example still has a non-empty target remainder to produce. */
+    private static boolean anyNonEmptyTarget(List<ExamplePair> examples) {
+        for (ExamplePair ex : examples) {
+            if (!ex.targetValue.isEmpty()) return true;
         }
         return false;
     }

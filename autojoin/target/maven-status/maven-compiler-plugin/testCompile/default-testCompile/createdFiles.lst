@@ -1,0 +1,14 @@
+com\autojoin\operator\OperatorTest.class
+com\autojoin\synthesis\BenchmarkTestHelper.class
+com\autojoin\synthesis\BenchmarkFixture$Target.class
+com\autojoin\synthesis\BenchmarkFixture$Source.class
+com\autojoin\synthesis\TransformationSynthesizerTest.class
+com\autojoin\q_gram\ColumnSuffixIndexTest.class
+com\autojoin\q_gram\QGramFinderTest.class
+com\autojoin\synthesis\BenchmarkIntegrationTest.class
+com\autojoin\synthesis\AutoJoinIntegrationTest.class
+com\autojoin\synthesis\BenchmarkFixture.class
+com\autojoin\operator\PhysicalOpsTest.class
+com\autojoin\model\TableTest.class
+com\autojoin\synthesis\BenchmarkFixture$GroundTruth.class
+com\autojoin\synthesis\BenchmarkIntegrationTest$Metrics.class
