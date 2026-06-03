@@ -1,0 +1,35 @@
+<div class="shell">
+  <header class="shell__header">
+    <div class="container shell__bar">
+      <div class="brand">
+        <div class="brand__mark">AJ</div>
+        <div>
+          <p class="brand__name">AutoJoin Benchmarks</p>
+          <p class="brand__meta">LSDI · Interactive evaluation suite</p>
+        </div>
+      </div>
+      <nav class="nav">
+        <a
+          *ngFor="let link of navLinks"
+          [routerLink]="link.path"
+          routerLinkActive="nav__link--active"
+          [routerLinkActiveOptions]="{ exact: link.path === '' }"
+          class="nav__link"
+        >
+          {{ link.label }}
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="shell__main">
+    <router-outlet />
+  </main>
+
+  <footer class="shell__footer">
+    <div class="container shell__footer-content">
+      <p>AutoJoin pipeline · Benchmark analytics</p>
+      <p>Local dev mode · Spring Boot + Angular</p>
+    </div>
+  </footer>
+</div>

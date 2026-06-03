@@ -1,0 +1,68 @@
+<section class="hero">
+  <div class="container hero__inner">
+    <div class="hero__content">
+      <p class="eyebrow">AutoJoin Evaluation Suite</p>
+      <h1>Benchmark joins with clarity and confidence.</h1>
+      <p class="hero__lead">
+        Launch curated benchmarks, inspect transformation quality, and visualize
+        precision/recall with detailed mismatch feedback.
+      </p>
+      <div class="hero__actions">
+        <button class="btn btn--primary" (click)="runAll()" [disabled]="running">
+          {{ running ? 'Running all benchmarks...' : 'Run all benchmarks' }}
+        </button>
+        <a class="btn btn--ghost" routerLink="/benchmarks">Pick specific</a>
+        <a class="btn btn--ghost" routerLink="/upload">Upload CSVs</a>
+      </div>
+    </div>
+    <div class="hero__panel card">
+      <div class="hero__stat">
+        <p>Total runs</p>
+        <h3>{{ summaryStats.totalRuns }}</h3>
+      </div>
+      <div class="hero__stat">
+        <p>Avg precision</p>
+        <h3>{{ summaryStats.avgPrecision | number: '1.2-2' }}</h3>
+      </div>
+      <div class="hero__stat">
+        <p>Avg recall</p>
+        <h3>{{ summaryStats.avgRecall | number: '1.2-2' }}</h3>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="container section">
+  <div class="section__header">
+    <div>
+      <p class="eyebrow">Recent runs</p>
+      <h2>Latest benchmark summaries</h2>
+    </div>
+    <a class="btn btn--link" routerLink="/results">View all results</a>
+  </div>
+
+  <div class="grid cards" *ngIf="recentResults.length > 0; else noResults">
+    <article class="card card--result" *ngFor="let result of recentResults">
+      <div>
+        <p class="label">{{ result.pairId }}</p>
+        <h3>{{ result.direction }}</h3>
+      </div>
+      <div class="metrics">
+        <div>
+          <span>Precision</span>
+          <strong>{{ result.precision | number: '1.2-2' }}</strong>
+        </div>
+        <div>
+          <span>Recall</span>
+          <strong>{{ result.recall | number: '1.2-2' }}</strong>
+        </div>
+      </div>
+    </article>
+  </div>
+
+  <ng-template #noResults>
+    <div class="card empty">
+      <p>No benchmark runs yet. Kick off a run to see diagnostics here.</p>
+    </div>
+  </ng-template>
+</section>

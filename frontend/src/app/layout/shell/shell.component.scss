@@ -1,0 +1,95 @@
+.shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+
+.shell__header {
+  background: rgba(15, 76, 92, 0.92);
+  color: #fff;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 10px 30px -24px rgba(15, 76, 92, 0.6);
+}
+
+.shell__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.2rem 0;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.brand__mark {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #f4a261, #e76f51);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #0f172a;
+  box-shadow: 0 12px 20px -14px rgba(231, 111, 81, 0.7);
+}
+
+.brand__name {
+  margin: 0;
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+
+.brand__meta {
+  margin: 0.2rem 0 0;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.nav {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.nav__link {
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  background: rgba(255, 255, 255, 0.1);
+  transition: all 0.2s ease;
+}
+
+.nav__link:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.nav__link--active {
+  background: #f4a261;
+  color: #1c1c1c;
+  font-weight: 600;
+}
+
+.shell__main {
+  padding: 2.5rem 0 3rem;
+}
+
+.shell__footer {
+  padding: 1.5rem 0 2.5rem;
+  color: var(--ink-500);
+}
+
+.shell__footer-content {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
