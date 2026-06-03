@@ -22,6 +22,18 @@ final class CandidateGenerator {
 
     private CandidateGenerator() {}
 
+    /**
+     * Bounds on candidate enumeration. Without these, generate() is
+     * O(seps1·parts1·seps2·parts2·len²·casings) per call and explodes on long,
+     * separator-rich source fields (e.g. a 90-char "Songwriter(s)" value with
+     * ~30 separators), costing seconds per search node. Real join-key
+     * transformations use a handful of separators, low part indices, and short
+     * extracted components, so these caps do not affect them.
+     */
+    private static final int MAX_SEPARATORS = 8;
+    private static final int MAX_SPLIT_PARTS = 8;
+    private static final int MAX_SUBSTR_LEN = 40;
+
     // -------------------------------------------------------------------------
     // Public entry point
     // -------------------------------------------------------------------------
@@ -31,10 +43,15 @@ final class CandidateGenerator {
 
         List<ScoredOp> candidates = new ArrayList<>();
 
+        // Appendix G casing pruning: only enumerate casings whose output could
+        // appear in the targets. Computed once and shared by all Substr-family
+        // generators.
+        Set<Casing> casings = usefulCasings(examples);
+
         addConstantCandidates(examples, candidates);
-        addSubstrCandidates(examples, candidates);
-        addSplitSubstrCandidates(examples, candidates);
-        addSplitSplitSubstrCandidates(examples, candidates);
+        addSubstrCandidates(examples, candidates, casings);
+        addSplitSubstrCandidates(examples, candidates, casings);
+        addSplitSplitSubstrCandidates(examples, candidates, casings);
 
         // Deduplicate by result fingerprint, keeping highest score
         Map<String, ScoredOp> deduped = new LinkedHashMap<>();
@@ -83,7 +100,7 @@ final class CandidateGenerator {
     // -------------------------------------------------------------------------
 
     private static void addSubstrCandidates(List<ExamplePair> examples,
-                                             List<ScoredOp> out) {
+                                             List<ScoredOp> out, Set<Casing> casings) {
         int numCols = examples.get(0).sourceRow.length;
 
         for (int k = 0; k < numCols; k++) {
@@ -91,7 +108,7 @@ final class CandidateGenerator {
             List<String> elems = elementsAt(examples, k);
             if (elems == null) continue;
 
-            for (Casing casing : Casing.values()) {
+            for (Casing casing : casings) {
                 enumerateSubstrOps(k, elems, casing, examples, out);
             }
         }
@@ -104,8 +121,9 @@ final class CandidateGenerator {
         for (int start = 0; start < elem0.length(); start++) {
             // length = -1 (take to end)
             addIfValid(new SubstrOp(k, start, -1, casing), examples, out);
-            // fixed lengths
-            for (int end = start + 1; end <= elem0.length(); end++) {
+            // fixed lengths (capped: real key components are short)
+            int maxEnd = Math.min(elem0.length(), start + MAX_SUBSTR_LEN);
+            for (int end = start + 1; end <= maxEnd; end++) {
                 addIfValid(new SubstrOp(k, start, end - start, casing), examples, out);
             }
         }
@@ -116,7 +134,7 @@ final class CandidateGenerator {
     // -------------------------------------------------------------------------
 
     private static void addSplitSubstrCandidates(List<ExamplePair> examples,
-                                                   List<ScoredOp> out) {
+                                                   List<ScoredOp> out, Set<Casing> casings) {
         int numCols = examples.get(0).sourceRow.length;
 
         for (int k = 0; k < numCols; k++) {
@@ -126,14 +144,14 @@ final class CandidateGenerator {
             Set<String> seps = extractSeparators(elems);
             for (String sep : seps) {
                 // Determine max number of parts across all examples after splitting
-                int maxParts = maxParts(elems, sep);
+                int maxParts = Math.min(maxParts(elems, sep), MAX_SPLIT_PARTS);
                 if (maxParts < 2) continue;
 
                 for (int m = 0; m < maxParts; m++) {
                     List<String> parts = splitElems(elems, sep, m);
                     if (parts == null) continue;
 
-                    for (Casing casing : Casing.values()) {
+                    for (Casing casing : casings) {
                         enumerateSplitSubstrOps(k, sep, m, parts, casing, examples, out);
                     }
                 }
@@ -148,7 +166,8 @@ final class CandidateGenerator {
         String part0 = parts.get(0);
         for (int start = 0; start < part0.length(); start++) {
             addIfValid(new SplitSubstrOp(k, sep, m, start, -1, casing), examples, out);
-            for (int end = start + 1; end <= part0.length(); end++) {
+            int maxEnd = Math.min(part0.length(), start + MAX_SUBSTR_LEN);
+            for (int end = start + 1; end <= maxEnd; end++) {
                 addIfValid(new SplitSubstrOp(k, sep, m, start, end - start, casing), examples, out);
             }
         }
@@ -159,7 +178,7 @@ final class CandidateGenerator {
     // -------------------------------------------------------------------------
 
     private static void addSplitSplitSubstrCandidates(List<ExamplePair> examples,
-                                                        List<ScoredOp> out) {
+                                                        List<ScoredOp> out, Set<Casing> casings) {
         int numCols = examples.get(0).sourceRow.length;
 
         for (int k1 = 0; k1 < numCols; k1++) {
@@ -168,7 +187,7 @@ final class CandidateGenerator {
 
             Set<String> seps1 = extractSeparators(elems);
             for (String sep1 : seps1) {
-                int maxParts1 = maxParts(elems, sep1);
+                int maxParts1 = Math.min(maxParts(elems, sep1), MAX_SPLIT_PARTS);
                 if (maxParts1 < 2) continue;
 
                 for (int k2 = 0; k2 < maxParts1; k2++) {
@@ -178,14 +197,14 @@ final class CandidateGenerator {
                     Set<String> seps2 = extractSeparators(afterFirstSplit);
                     for (String sep2 : seps2) {
                         if (sep2.equals(sep1)) continue; // avoid redundancy
-                        int maxParts2 = maxParts(afterFirstSplit, sep2);
+                        int maxParts2 = Math.min(maxParts(afterFirstSplit, sep2), MAX_SPLIT_PARTS);
                         if (maxParts2 < 2) continue;
 
                         for (int m = 0; m < maxParts2; m++) {
                             List<String> finalParts = splitElems(afterFirstSplit, sep2, m);
                             if (finalParts == null) continue;
 
-                            for (Casing casing : Casing.values()) {
+                            for (Casing casing : casings) {
                                 enumerateSplitSplitSubstrOps(
                                         k1, sep1, k2, sep2, m, finalParts, casing, examples, out);
                             }
@@ -206,7 +225,8 @@ final class CandidateGenerator {
         for (int start = 0; start < part0.length(); start++) {
             addIfValid(new SplitSplitSubstrOp(k1, sep1, k2, sep2, m, start, -1, casing),
                     examples, out);
-            for (int end = start + 1; end <= part0.length(); end++) {
+            int maxEnd = Math.min(part0.length(), start + MAX_SUBSTR_LEN);
+            for (int end = start + 1; end <= maxEnd; end++) {
                 addIfValid(new SplitSplitSubstrOp(k1, sep1, k2, sep2, m, start, end - start, casing),
                         examples, out);
             }
@@ -250,6 +270,34 @@ final class CandidateGenerator {
         return sb.toString();
     }
 
+    /**
+     * Appendix G casing pruning: return only the casings that could possibly
+     * produce a substring of the example targets, so incompatible casings are
+     * never enumerated. NONE (identity) is always kept. A casing that introduces
+     * uppercase (UPPER, TITLE) is useless if no target contains an uppercase
+     * letter, and LOWER is useless if no target contains a lowercase letter —
+     * in those cases the only inputs they could match are letter-free, where the
+     * output equals NONE's and is already covered. Pruning is over the union of
+     * all example targets, so a casing is dropped only when provably useless for
+     * every example (never losing a valid candidate).
+     */
+    private static Set<Casing> usefulCasings(List<ExamplePair> examples) {
+        boolean hasUpper = false, hasLower = false;
+        for (ExamplePair ex : examples) {
+            String t = ex.targetValue;
+            for (int i = 0; i < t.length() && !(hasUpper && hasLower); i++) {
+                char c = t.charAt(i);
+                if (Character.isUpperCase(c)) hasUpper = true;
+                else if (Character.isLowerCase(c)) hasLower = true;
+            }
+            if (hasUpper && hasLower) break;
+        }
+        Set<Casing> casings = EnumSet.of(Casing.NONE);
+        if (hasLower) casings.add(Casing.LOWER);
+        if (hasUpper) { casings.add(Casing.UPPER); casings.add(Casing.TITLE); }
+        return casings;
+    }
+
     /** Get the value at column k for each example row; null if any row is too short. */
     private static List<String> elementsAt(List<ExamplePair> examples, int k) {
         List<String> result = new ArrayList<>(examples.size());
@@ -286,21 +334,30 @@ final class CandidateGenerator {
      * sequences that appear in the source strings (Appendix G).
      */
     static Set<String> extractSeparators(List<String> elems) {
-        Set<String> seps = new LinkedHashSet<>();
+        // Single-char separators are the most useful, so collect them first and
+        // only fall back to 2-char sequences to fill the budget. This keeps the
+        // set small on separator-rich text without losing the common cases.
+        Set<String> singles = new LinkedHashSet<>();
+        Set<String> doubles = new LinkedHashSet<>();
         for (String elem : elems) {
             for (int i = 0; i < elem.length(); i++) {
                 char c = elem.charAt(i);
                 if (!Character.isLetterOrDigit(c)) {
-                    seps.add(String.valueOf(c));
-                    // 2-char sequences containing the non-alphanum char
-                    if (i + 1 < elem.length()) {
-                        seps.add(elem.substring(i, i + 2));
-                    }
-                    if (i > 0) {
-                        seps.add(elem.substring(i - 1, i + 1));
-                    }
+                    singles.add(String.valueOf(c));
+                    if (i + 1 < elem.length()) doubles.add(elem.substring(i, i + 2));
+                    if (i > 0) doubles.add(elem.substring(i - 1, i + 1));
                 }
             }
+        }
+
+        Set<String> seps = new LinkedHashSet<>();
+        for (String s : singles) {
+            if (seps.size() >= MAX_SEPARATORS) return seps;
+            seps.add(s);
+        }
+        for (String d : doubles) {
+            if (seps.size() >= MAX_SEPARATORS) break;
+            seps.add(d);
         }
         return seps;
     }

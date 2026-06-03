@@ -5,8 +5,9 @@ import com.autojoin.model.Row;
 import com.autojoin.model.Table;
 import com.google.gson.Gson;
 
-import java.io.FileReader;
 import java.io.IOException;
+import java.io.Reader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -21,15 +22,26 @@ public class BenchmarkTestHelper {
 
     public static BenchmarkFixture loadFixture(String pairId) throws IOException {
         Path fixturePath = FIXTURE_DIR.resolve(pairId).resolve("fixture.json");
-        try (FileReader reader = new FileReader(fixturePath.toFile())) {
+        try (Reader reader = Files.newBufferedReader(fixturePath, StandardCharsets.UTF_8)) {
             return GSON.fromJson(reader, BenchmarkFixture.class);
+        }
+    }
+
+    /** Returns every benchmark pair id (one per sub-directory of the fixture dir), sorted. */
+    public static List<String> listFixtures() throws IOException {
+        try (java.util.stream.Stream<Path> entries = Files.list(FIXTURE_DIR)) {
+            return entries
+                    .filter(Files::isDirectory)
+                    .map(p -> p.getFileName().toString())
+                    .sorted()
+                    .collect(Collectors.toList());
         }
     }
 
     public static Table loadTable(String relativePath, String name, List<String> keyColumns)
             throws IOException {
         Path csvPath = DATA_DIR.resolve(relativePath);
-        try (FileReader reader = new FileReader(csvPath.toFile())) {
+        try (Reader reader = Files.newBufferedReader(csvPath, StandardCharsets.UTF_8)) {
             return Table.fromCsv(name, reader, keyColumns);
         }
     }
@@ -59,6 +71,33 @@ public class BenchmarkTestHelper {
         return map;
     }
 
+    /**
+     * Build a fingerprint from a row's key columns, resolving duplicate column
+     * names positionally: the k-th occurrence of a name in {@code keyCols} maps
+     * to the k-th column of that name in the row. This keeps duplicate headers
+     * (e.g. a target with two "Hanzi" columns) distinct, matching the positional
+     * ground-truth fingerprint. A plain {@code row.get(name)} would collapse both
+     * occurrences onto a single value and never equal the ground truth.
+     */
+    public static String positionalFingerprint(Row row, List<String> keyCols, String sep) {
+        List<String> rowCols = row.getColumnNames();
+        boolean[] used = new boolean[rowCols.size()];
+        List<String> parts = new ArrayList<>(keyCols.size());
+        for (String key : keyCols) {
+            int idx = -1;
+            for (int i = 0; i < rowCols.size(); i++) {
+                if (!used[i] && rowCols.get(i).equals(key)) { idx = i; break; }
+            }
+            if (idx >= 0) {
+                used[idx] = true;
+                parts.add(row.get(idx));
+            } else {
+                parts.add(row.get(key)); // key not present positionally — fall back
+            }
+        }
+        return String.join(sep, parts);
+    }
+
     public static boolean isForwardDirection(JoinResult result, List<String> srcKeyCols) {
         if (result.isEmpty()) return true;
         Row first = result.getJoinedPairs().get(0)[0];
@@ -83,7 +122,7 @@ public class BenchmarkTestHelper {
             Row tgtRow = forward ? pair[1] : pair[0];
 
             String srcFp = srcKeyCols.stream().map(srcRow::get).collect(Collectors.joining("|"));
-            String tgtFp = tgtKeyCols.stream().map(tgtRow::get).collect(Collectors.joining(" | "));
+            String tgtFp = positionalFingerprint(tgtRow, tgtKeyCols, " | ");
             List<String> expectedTgt = gtMap.get(srcFp);
 
             boolean mismatch = expectedTgt == null

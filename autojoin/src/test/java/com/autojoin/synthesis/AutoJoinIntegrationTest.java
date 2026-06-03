@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -24,6 +25,26 @@ import static org.junit.jupiter.api.Assertions.*;
 class AutoJoinIntegrationTest {
 
     private final AutoJoin autoJoin = new AutoJoin();
+
+    /**
+     * Pretty-prints a JoinResult. AutoJoin does not build a merged table; it
+     * returns a list of [sourceRow, targetRow] pairs, so we print each pair's
+     * full source row beside its full target row.
+     */
+    private static void printResult(String testName, JoinResult result) {
+        System.out.println("\n===== " + testName + " =====");
+        if (result.isEmpty()) {
+            System.out.println("  <empty result>");
+            return;
+        }
+        System.out.println("  transform: " + result.getTransformationDescription());
+        System.out.println("  " + result.size() + " joined pair(s):");
+        int i = 1;
+        for (Row[] pair : result.getJoinedPairs()) {
+            System.out.println("  [" + (i++) + "] source=" + pair[0].asMap()
+                    + "  ||  target=" + pair[1].asMap());
+        }
+    }
 
     // -----------------------------------------------------------------------
     // Figure 1: US presidents — "First Last" vs "Last, First(year)"
@@ -51,16 +72,17 @@ class AutoJoinIntegrationTest {
         ));
 
         JoinResult result = autoJoin.join(leftTable, rightTable);
+        printResult("figure1_presidentsJoin", result);
 
         assertFalse(result.isEmpty(), "Expected at least one joined pair");
-        // The join should cover Obama, Bush W., Clinton, Reagan at minimum
-        Set<String> joinedLeft = result.getJoinedPairs().stream()
-                .map(pair -> pair[0].get("President"))
+        // AutoJoin returns whichever direction joins best, so pair[0] may be from
+        // either table. Collect President values from both sides of each pair.
+        Set<String> joinedNames = result.getJoinedPairs().stream()
+                .flatMap(pair -> Stream.of(pair[0].get("President"), pair[1].get("President")))
                 .collect(Collectors.toSet());
-        assertTrue(joinedLeft.contains("Barack Obama"),   "Obama should be jo" +
-                "ined");
-        assertTrue(joinedLeft.contains("Bill Clinton"),   "Clinton should be joined");
-        assertTrue(joinedLeft.contains("Ronald Reagan"),  "Reagan should be joined");
+        assertTrue(joinedNames.contains("Barack Obama"),  "Obama should be joined");
+        assertTrue(joinedNames.contains("Bill Clinton"),  "Clinton should be joined");
+        assertTrue(joinedNames.contains("Ronald Reagan"), "Reagan should be joined");
     }
 
     // -----------------------------------------------------------------------
@@ -91,6 +113,7 @@ class AutoJoinIntegrationTest {
         ));
 
         JoinResult result = autoJoin.join(leftTable, rightTable);
+        printResult("figure4_sessionNameJoin", result);
 
         assertFalse(result.isEmpty(), "Expected at least one joined pair for Figure 4");
 
@@ -121,6 +144,7 @@ class AutoJoinIntegrationTest {
         ));
 
         JoinResult result = autoJoin.join(sourceTable, targetTable);
+        printResult("synthetic_concatenationJoin", result);
 
         assertFalse(result.isEmpty(), "Expected join to succeed for simple concat");
         assertEquals(3, result.size(), "Expected all 3 rows to join");
@@ -143,6 +167,7 @@ class AutoJoinIntegrationTest {
         ));
 
         JoinResult result = autoJoin.join(sourceTable, targetTable);
+        printResult("synthetic_substringExtraction", result);
 
         assertFalse(result.isEmpty(), "Expected join to succeed for substring extraction");
         assertEquals(3, result.size(), "Expected all 3 rows to join");
@@ -163,6 +188,7 @@ class AutoJoinIntegrationTest {
         ));
 
         JoinResult result = autoJoin.join(sourceTable, targetTable);
+        printResult("nonJoinableTables_returnsEmpty", result);
         // We just assert it doesn't throw and returns a coherent result
         assertNotNull(result);
     }
