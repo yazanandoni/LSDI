@@ -63,8 +63,46 @@ public class UploadController {
                     "upload", "source -> target", tp, result.size(), 0,
                     1.0, 1.0, 0L, result.getTransformationDescription(), mismatches);
 
+            String csv = buildResultCsv(result);
             String resultId = resultStore.save(summary);
+            resultStore.saveCsv(resultId, csv);
             return ResponseEntity.ok(summary);
         }
+    }
+
+    private String buildResultCsv(JoinResult result) {
+        List<Row[]> pairs = result.getJoinedPairs();
+        Row firstSource = pairs.get(0)[0];
+        Row firstTarget = pairs.get(0)[1];
+
+        StringBuilder sb = new StringBuilder();
+        for (String col : firstSource.getColumnNames()) {
+            sb.append(escapeCsv(col)).append(",");
+        }
+        for (String col : firstTarget.getColumnNames()) {
+            sb.append(escapeCsv(col)).append(",");
+        }
+        sb.setLength(sb.length() - 1);
+        sb.append("\n");
+
+        for (Row[] pair : pairs) {
+            for (int i = 0; i < pair[0].size(); i++) {
+                sb.append(escapeCsv(pair[0].get(i))).append(",");
+            }
+            for (int i = 0; i < pair[1].size(); i++) {
+                sb.append(escapeCsv(pair[1].get(i))).append(",");
+            }
+            sb.setLength(sb.length() - 1);
+            sb.append("\n");
+        }
+        return sb.toString();
+    }
+
+    private String escapeCsv(String value) {
+        if (value == null) return "";
+        if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
+            return "\"" + value.replace("\"", "\"\"") + "\"";
+        }
+        return value;
     }
 }

@@ -8,8 +8,11 @@ import com.autojoin.backend.model.BenchmarkSummaryView;
 import com.autojoin.backend.model.ResultIdResponse;
 import com.autojoin.backend.service.BenchmarkResultStore;
 import com.autojoin.backend.service.BenchmarkService;
+import com.autojoin.backend.service.BenchmarkService.BenchmarkRunOutcome;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -40,8 +43,9 @@ public class BenchmarkController {
     @PostMapping("/benchmarks/run")
     public ResponseEntity<ResultIdResponse> runBenchmark(@Valid @RequestBody BenchmarkRunRequest request)
             throws IOException {
-        BenchmarkSummary summary = benchmarkService.runBenchmark(request.pairId());
-        String resultId = resultStore.save(summary);
+        BenchmarkRunOutcome outcome = benchmarkService.runBenchmark(request.pairId());
+        String resultId = resultStore.save(outcome.summary());
+        resultStore.saveCsv(resultId, outcome.csv());
         return ResponseEntity.ok(new ResultIdResponse(resultId));
     }
 
@@ -49,9 +53,13 @@ public class BenchmarkController {
     public ResponseEntity<List<ResultIdResponse>> runAllBenchmarks() throws IOException {
         List<BenchmarkDescriptor> all = benchmarkService.listBenchmarks();
         List<String> pairIds = all.stream().map(BenchmarkDescriptor::pairId).toList();
-        List<BenchmarkSummary> summaries = benchmarkService.runBenchmarks(pairIds);
-        List<ResultIdResponse> ids = summaries.stream()
-                .map(s -> new ResultIdResponse(resultStore.save(s)))
+        List<BenchmarkRunOutcome> outcomes = benchmarkService.runBenchmarks(pairIds);
+        List<ResultIdResponse> ids = outcomes.stream()
+                .map(o -> {
+                    String id = resultStore.save(o.summary());
+                    resultStore.saveCsv(id, o.csv());
+                    return new ResultIdResponse(id);
+                })
                 .toList();
         return ResponseEntity.ok(ids);
     }
@@ -59,9 +67,13 @@ public class BenchmarkController {
     @PostMapping("/benchmarks/run-batch")
     public ResponseEntity<List<ResultIdResponse>> runBatch(@RequestBody BatchRunRequest request)
             throws IOException {
-        List<BenchmarkSummary> summaries = benchmarkService.runBenchmarks(request.pairIds());
-        List<ResultIdResponse> ids = summaries.stream()
-                .map(s -> new ResultIdResponse(resultStore.save(s)))
+        List<BenchmarkRunOutcome> outcomes = benchmarkService.runBenchmarks(request.pairIds());
+        List<ResultIdResponse> ids = outcomes.stream()
+                .map(o -> {
+                    String id = resultStore.save(o.summary());
+                    resultStore.saveCsv(id, o.csv());
+                    return new ResultIdResponse(id);
+                })
                 .toList();
         return ResponseEntity.ok(ids);
     }
@@ -70,6 +82,16 @@ public class BenchmarkController {
     public ResponseEntity<BenchmarkSummaryView> getResult(@PathVariable("id") String id) {
         return resultStore.find(id)
                 .map(summary -> ResponseEntity.ok(toView(id, summary)))
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/results/{id}/csv")
+    public ResponseEntity<byte[]> getResultCsv(@PathVariable("id") String id) {
+        return resultStore.getCsv(id)
+                .map(csv -> ResponseEntity.ok()
+                        .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"result-" + id + ".csv\"")
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .body(csv.getBytes()))
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 

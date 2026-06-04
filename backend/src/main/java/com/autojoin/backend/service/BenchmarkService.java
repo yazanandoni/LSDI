@@ -30,6 +30,8 @@ public class BenchmarkService {
     private final BenchmarkFixtureLoader fixtureLoader;
     private final AutoJoin autoJoin = new AutoJoin();
 
+    public record BenchmarkRunOutcome(BenchmarkSummary summary, String csv) {}
+
     public BenchmarkService(@Value("${app.data-root:}") String dataRootStr) {
         String root = dataRootStr;
         if (root.isEmpty()) {
@@ -66,7 +68,7 @@ public class BenchmarkService {
         return benchmarks;
     }
 
-    public BenchmarkSummary runBenchmark(String pairId) throws IOException {
+    public BenchmarkRunOutcome runBenchmark(String pairId) throws IOException {
         long start = System.currentTimeMillis();
         BenchmarkFixture fixture = fixtureLoader.loadFixture(pairId);
         Table sourceTable = loadTable(fixture.source.file, fixture.source.key_columns);
@@ -78,8 +80,12 @@ public class BenchmarkService {
 
         JoinResult result = autoJoin.join(sourceTable, targetTable);
         long elapsed = System.currentTimeMillis() - start;
+
+        String csv = buildResultCsv(result);
         if (result == null || result.isEmpty()) {
-            return new BenchmarkSummary(pairId, "unknown", 0, 0, gtMap.size(), 0.0, 0.0, elapsed, null, List.of());
+            return new BenchmarkRunOutcome(
+                new BenchmarkSummary(pairId, "unknown", 0, 0, gtMap.size(), 0.0, 0.0, elapsed, null, List.of()),
+                csv);
         }
 
         List<String> srcKeyCols = fixture.source.key_columns;
@@ -106,16 +112,55 @@ public class BenchmarkService {
         double recall = gtPairs == 0 ? 0.0 : (double) tp / gtPairs;
         String dirLabel = forward ? "source -> target" : "target -> source";
 
-        return new BenchmarkSummary(pairId, dirLabel, tp, result.size(), gtPairs, precision, recall, elapsed,
-                result.getTransformationDescription(), mismatches);
+        return new BenchmarkRunOutcome(
+            new BenchmarkSummary(pairId, dirLabel, tp, result.size(), gtPairs, precision, recall, elapsed,
+                    result.getTransformationDescription(), mismatches),
+            csv);
     }
 
-    public List<BenchmarkSummary> runBenchmarks(List<String> pairIds) throws IOException {
-        List<BenchmarkSummary> summaries = new ArrayList<>();
-        for (String pairId : pairIds) {
-            summaries.add(runBenchmark(pairId));
+    private String buildResultCsv(JoinResult result) {
+        if (result == null || result.isEmpty()) return "";
+        List<Row[]> pairs = result.getJoinedPairs();
+        Row firstSource = pairs.get(0)[0];
+        Row firstTarget = pairs.get(0)[1];
+
+        StringBuilder sb = new StringBuilder();
+        for (String col : firstSource.getColumnNames()) {
+            sb.append(escapeCsv(col)).append(",");
         }
-        return summaries;
+        for (String col : firstTarget.getColumnNames()) {
+            sb.append(escapeCsv(col)).append(",");
+        }
+        sb.setLength(sb.length() - 1);
+        sb.append("\n");
+
+        for (Row[] pair : pairs) {
+            for (int i = 0; i < pair[0].size(); i++) {
+                sb.append(escapeCsv(pair[0].get(i))).append(",");
+            }
+            for (int i = 0; i < pair[1].size(); i++) {
+                sb.append(escapeCsv(pair[1].get(i))).append(",");
+            }
+            sb.setLength(sb.length() - 1);
+            sb.append("\n");
+        }
+        return sb.toString();
+    }
+
+    private String escapeCsv(String value) {
+        if (value == null) return "";
+        if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
+            return "\"" + value.replace("\"", "\"\"") + "\"";
+        }
+        return value;
+    }
+
+    public List<BenchmarkRunOutcome> runBenchmarks(List<String> pairIds) throws IOException {
+        List<BenchmarkRunOutcome> outcomes = new ArrayList<>();
+        for (String pairId : pairIds) {
+            outcomes.add(runBenchmark(pairId));
+        }
+        return outcomes;
     }
 
     private Path resolvePath(String relativePath) {

@@ -84,6 +84,29 @@
   margin-top: 0.5rem;
   padding-top: 0.5rem;
   border-top: 1px solid rgba(15, 76, 92, 0.1);
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.btn--secondary {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.78rem;
+  border: 1px solid rgba(15, 76, 92, 0.2);
+  background: transparent;
+  color: var(--ocean-500);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.btn--secondary:hover {
+  background: rgba(15, 76, 92, 0.08);
 }
 
 .diag {
