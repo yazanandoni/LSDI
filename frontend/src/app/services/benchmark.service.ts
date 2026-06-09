@@ -7,6 +7,7 @@ import {
   BenchmarkSummaryView,
   ResultIdResponse
 } from '../app.models';
+import { AlgorithmTrace } from '../pages/trace/trace.models';
 
 @Injectable({ providedIn: 'root' })
 export class BenchmarkService {
@@ -34,5 +35,9 @@ export class BenchmarkService {
 
   getResult(id: string): Observable<BenchmarkSummaryView> {
     return this.http.get<BenchmarkSummaryView>(`${API_BASE_URL}/results/${id}`);
+  }
+
+  getTrace(id: string): Observable<AlgorithmTrace> {
+    return this.http.get<AlgorithmTrace>(`${API_BASE_URL}/results/${id}/trace`);
   }
 }

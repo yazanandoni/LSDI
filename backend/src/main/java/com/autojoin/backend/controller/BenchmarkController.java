@@ -9,6 +9,7 @@ import com.autojoin.backend.model.ResultIdResponse;
 import com.autojoin.backend.service.BenchmarkResultStore;
 import com.autojoin.backend.service.BenchmarkService;
 import com.autojoin.backend.service.BenchmarkService.BenchmarkRunOutcome;
+import com.autojoin.trace.AlgorithmTrace;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -46,6 +47,7 @@ public class BenchmarkController {
         BenchmarkRunOutcome outcome = benchmarkService.runBenchmark(request.pairId());
         String resultId = resultStore.save(outcome.summary());
         resultStore.saveCsv(resultId, outcome.csv());
+        resultStore.saveTrace(resultId, outcome.trace());
         return ResponseEntity.ok(new ResultIdResponse(resultId));
     }
 
@@ -58,6 +60,7 @@ public class BenchmarkController {
                 .map(o -> {
                     String id = resultStore.save(o.summary());
                     resultStore.saveCsv(id, o.csv());
+                    resultStore.saveTrace(id, o.trace());
                     return new ResultIdResponse(id);
                 })
                 .toList();
@@ -72,6 +75,7 @@ public class BenchmarkController {
                 .map(o -> {
                     String id = resultStore.save(o.summary());
                     resultStore.saveCsv(id, o.csv());
+                    resultStore.saveTrace(id, o.trace());
                     return new ResultIdResponse(id);
                 })
                 .toList();
@@ -92,6 +96,13 @@ public class BenchmarkController {
                         .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"result-" + id + ".csv\"")
                         .contentType(MediaType.TEXT_PLAIN)
                         .body(csv.getBytes()))
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/results/{id}/trace")
+    public ResponseEntity<AlgorithmTrace> getResultTrace(@PathVariable("id") String id) {
+        return resultStore.getTrace(id)
+                .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 

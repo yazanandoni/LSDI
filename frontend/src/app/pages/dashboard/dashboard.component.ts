@@ -52,4 +52,8 @@ export class DashboardComponent implements OnInit {
       }
     });
   }
+
+  viewTrace(result: BenchmarkSummaryView): void {
+    this.router.navigate(['/trace', result.resultId], { queryParams: { from: 'dashboard' } });
+  }
 }

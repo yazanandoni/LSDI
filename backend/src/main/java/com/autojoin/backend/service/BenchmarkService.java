@@ -7,6 +7,7 @@ import com.autojoin.backend.model.BenchmarkSummary;
 import com.autojoin.backend.model.Mismatch;
 import com.autojoin.model.Row;
 import com.autojoin.model.Table;
+import com.autojoin.trace.AlgorithmTrace;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -30,7 +31,7 @@ public class BenchmarkService {
     private final BenchmarkFixtureLoader fixtureLoader;
     private final AutoJoin autoJoin = new AutoJoin();
 
-    public record BenchmarkRunOutcome(BenchmarkSummary summary, String csv) {}
+    public record BenchmarkRunOutcome(BenchmarkSummary summary, String csv, AlgorithmTrace trace) {}
 
     public BenchmarkService(@Value("${app.data-root:}") String dataRootStr) {
         String root = dataRootStr;
@@ -81,11 +82,13 @@ public class BenchmarkService {
         JoinResult result = autoJoin.join(sourceTable, targetTable);
         long elapsed = System.currentTimeMillis() - start;
 
+        AlgorithmTrace trace = result.getTrace();
+
         String csv = buildResultCsv(result);
         if (result == null || result.isEmpty()) {
             return new BenchmarkRunOutcome(
                 new BenchmarkSummary(pairId, "unknown", 0, 0, gtMap.size(), 0.0, 0.0, elapsed, null, List.of()),
-                csv);
+                csv, trace);
         }
 
         List<String> srcKeyCols = fixture.source.key_columns;
@@ -115,7 +118,7 @@ public class BenchmarkService {
         return new BenchmarkRunOutcome(
             new BenchmarkSummary(pairId, dirLabel, tp, result.size(), gtPairs, precision, recall, elapsed,
                     result.getTransformationDescription(), mismatches),
-            csv);
+            csv, trace);
     }
 
     private String buildResultCsv(JoinResult result) {
