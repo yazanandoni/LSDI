@@ -53,6 +53,11 @@
             <span>Duration</span>
             <strong>{{ selectedResult.durationMs }}ms</strong>
           </div>
+          <div>
+            <a class="btn btn--secondary"
+               [href]="'http://localhost:8080/api/results/' + selectedResult.resultId + '/csv'"
+               download>Download CSV</a>
+          </div>
         </div>
       </div>
 
