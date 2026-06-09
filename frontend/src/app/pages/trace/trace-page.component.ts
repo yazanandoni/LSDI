@@ -4,11 +4,13 @@ import { DecimalPipe } from '@angular/common';
 import { BenchmarkService } from '../../services/benchmark.service';
 import { AlgorithmTrace } from './trace.models';
 import { TraceFlowBarComponent, FlowStep } from './trace-flow-bar.component';
+import { DiscoverySectionComponent } from './discovery-section.component';
+import { LearningSectionComponent } from './learning-section.component';
 
 @Component({
   selector: 'app-trace-page',
   standalone: true,
-  imports: [RouterLink, DecimalPipe, TraceFlowBarComponent],
+  imports: [RouterLink, DecimalPipe, TraceFlowBarComponent, DiscoverySectionComponent, LearningSectionComponent],
   template: `
     <section class="container section">
       <a class="back-link" [routerLink]="backLink">← Back to {{ backLabel }}</a>
@@ -37,28 +39,20 @@ import { TraceFlowBarComponent, FlowStep } from './trace-flow-bar.component';
             <h3>Input Tables</h3>
             <p class="helper">Source and target tables loaded for this benchmark.</p>
             <div class="placeholder">
-              <p>Table preview will appear here in Sprint 2.</p>
+              <p>Table preview coming in a future sprint.</p>
             </div>
           </div>
 
           <div class="trace-section-connector"></div>
 
           <div class="card trace-section" id="step-discovery">
-            <h3>1. Discovery — q-gram Matching</h3>
-            <p class="helper">Finding joinable row pairs between source and target columns.</p>
-            <div class="placeholder">
-              <p>Column pair matches and q-gram graph will appear here in Sprint 2.</p>
-            </div>
+            <app-discovery-section [trace]="winningDiscovery" />
           </div>
 
           <div class="trace-section-connector"></div>
 
           <div class="card trace-section" id="step-learning">
-            <h3>2. Transformation Learning</h3>
-            <p class="helper">Learning a transformation program from example row pairs.</p>
-            <div class="placeholder">
-              <p>Example pairs, operator tree, and injective score will appear here in Sprint 3.</p>
-            </div>
+            <app-learning-section [trace]="winningLearning" />
           </div>
 
           <div class="trace-section-connector"></div>
@@ -268,6 +262,18 @@ export class TracePageComponent implements OnInit {
 
   activeStep = 'step-input';
   completedSteps: Set<string> = new Set(['step-input']);
+
+  get winningDiscovery() {
+    if (!this.trace) return null;
+    const dirTrace = this.trace.forwardWon ? this.trace.forwardTrace : this.trace.backwardTrace;
+    return dirTrace.discovery;
+  }
+
+  get winningLearning() {
+    if (!this.trace) return null;
+    const dirTrace = this.trace.forwardWon ? this.trace.forwardTrace : this.trace.backwardTrace;
+    return dirTrace.learning;
+  }
 
   constructor(
     private route: ActivatedRoute,

@@ -11,9 +11,52 @@ export interface DirectionTrace {
 }
 
 export interface DiscoveryTrace {
+  columnPairGroups: ColumnPairGroup[];
+}
+
+export interface ColumnPairGroup {
+  sourceColumnName: string;
+  targetColumnName: string;
+  matchCount: number;
+  avgScore: number;
+  topMatches: QGramMatch[];
+}
+
+export interface QGramMatch {
+  sourceValue: string;
+  qgram: string;
+  targetValue: string;
+  score: number;
 }
 
 export interface LearningTrace {
+  sourceColumnName: string;
+  targetColumnName: string;
+  injectiveScore: number;
+  totalSourceRows: number;
+  examplePairs: ExamplePairData[];
+  operators: OperatorNode[];
+  demoInput: string;
+  demoTarget: string;
+  transformDemo: TransformStep[];
+}
+
+export interface ExamplePairData {
+  sourceValue: string;
+  targetValue: string;
+}
+
+export interface OperatorNode {
+  type: string;
+  description: string;
+  params: Record<string, string>;
+}
+
+export interface TransformStep {
+  operatorType: string;
+  operatorDescription: string;
+  params: Record<string, string>;
+  output: string;
 }
 
 export interface ApplicationTrace {
