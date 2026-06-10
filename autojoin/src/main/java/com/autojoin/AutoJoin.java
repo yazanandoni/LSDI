@@ -1,5 +1,6 @@
 package com.autojoin;
 
+import com.autojoin.model.Column;
 import com.autojoin.model.Row;
 import com.autojoin.model.Table;
 import com.autojoin.operator.ConstantOp;
@@ -18,6 +19,8 @@ import com.autojoin.trace.ColumnPairGroup;
 import com.autojoin.trace.DirectionTrace;
 import com.autojoin.trace.DiscoveryTrace;
 import com.autojoin.trace.ExamplePairData;
+import com.autojoin.trace.InputTablesTrace;
+import com.autojoin.trace.InputTablesTrace.TableInfo;
 import com.autojoin.trace.LearningTrace;
 import com.autojoin.trace.OperatorNode;
 import com.autojoin.trace.QGramMatch;
@@ -61,7 +64,8 @@ public class AutoJoin {
             }
         }
 
-        AlgorithmTrace trace = new AlgorithmTrace(forwardWon, forward.trace, backward.trace);
+        InputTablesTrace inputTables = buildInputTablesTrace(ts, tt);
+        AlgorithmTrace trace = new AlgorithmTrace(forwardWon, forward.trace, backward.trace, inputTables);
         return JoinResult.of(bestJoin.getJoinedPairs(), bestJoin.getTransformationDescription(), trace);
     }
 
@@ -87,6 +91,37 @@ public class AutoJoin {
         static DirectionResult empty() {
             return new DirectionResult(JoinResult.empty(), 0, DirectionTrace.empty());
         }
+    }
+
+    private static InputTablesTrace buildInputTablesTrace(Table source, Table target) {
+        List<String> srcCols = source.getColumns().stream().map(Column::getName).toList();
+        List<String> tgtCols = target.getColumns().stream().map(Column::getName).toList();
+        List<String> srcKeys = source.getKeyColumns().stream().map(Column::getName).toList();
+        List<String> tgtKeys = target.getKeyColumns().stream().map(Column::getName).toList();
+
+        List<List<String>> srcSamples = new ArrayList<>();
+        int srcLimit = Math.min(5, source.numRows());
+        for (int i = 0; i < srcLimit; i++) {
+            Row row = source.getRow(i);
+            List<String> vals = new ArrayList<>();
+            for (String col : srcCols) vals.add(row.get(col));
+            srcSamples.add(vals);
+        }
+
+        List<List<String>> tgtSamples = new ArrayList<>();
+        int tgtLimit = Math.min(5, target.numRows());
+        for (int i = 0; i < tgtLimit; i++) {
+            Row row = target.getRow(i);
+            List<String> vals = new ArrayList<>();
+            for (String col : tgtCols) vals.add(row.get(col));
+            tgtSamples.add(vals);
+        }
+
+        return new InputTablesTrace(
+                new TableInfo("Source", source.numRows(), source.numColumns(),
+                        srcCols, srcKeys, srcSamples),
+                new TableInfo("Target", target.numRows(), target.numColumns(),
+                        tgtCols, tgtKeys, tgtSamples));
     }
 
     private static DiscoveryTrace buildDiscoveryTrace(List<ColumnPairMatches> matches,

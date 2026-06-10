@@ -2,6 +2,21 @@ export interface AlgorithmTrace {
   forwardWon: boolean;
   forwardTrace: DirectionTrace;
   backwardTrace: DirectionTrace;
+  inputTables: InputTablesTrace;
+}
+
+export interface InputTablesTrace {
+  source: TableInfo;
+  target: TableInfo;
+}
+
+export interface TableInfo {
+  name: string;
+  rows: number;
+  columns: number;
+  columnNames: string[];
+  keyColumns: string[];
+  sampleRows: string[][];
 }
 
 export interface DirectionTrace {

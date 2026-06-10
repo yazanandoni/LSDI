@@ -7,11 +7,12 @@ import { TraceFlowBarComponent, FlowStep } from './trace-flow-bar.component';
 import { DiscoverySectionComponent } from './discovery-section.component';
 import { LearningSectionComponent } from './learning-section.component';
 import { ApplicationSectionComponent } from './application-section.component';
+import { InputSectionComponent } from './input-section.component';
 
 @Component({
   selector: 'app-trace-page',
   standalone: true,
-  imports: [RouterLink, DecimalPipe, TraceFlowBarComponent, DiscoverySectionComponent, LearningSectionComponent, ApplicationSectionComponent],
+  imports: [RouterLink, DecimalPipe, TraceFlowBarComponent, DiscoverySectionComponent, LearningSectionComponent, ApplicationSectionComponent, InputSectionComponent],
   template: `
     <section class="container section">
       <a class="back-link" [routerLink]="backLink">← Back to {{ backLabel }}</a>
@@ -37,11 +38,7 @@ import { ApplicationSectionComponent } from './application-section.component';
       @if (trace) {
         <div class="trace-content">
           <div class="card trace-section" id="step-input">
-            <h3>Input Tables</h3>
-            <p class="helper">Source and target tables loaded for this benchmark.</p>
-            <div class="placeholder">
-              <p>Table preview coming in a future sprint.</p>
-            </div>
+            <app-input-section [trace]="trace.inputTables" />
           </div>
 
           <div class="trace-section-connector"></div>
