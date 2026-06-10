@@ -51,6 +51,35 @@ public class ColumnSuffixIndex {
     }
 
     /**
+     * Whether any suffix starts with the qGram. Used by the BinarySearchQ probes
+     * (Algorithm 3), which only need existence — unlike {@link #findMatches} this
+     * does not materialize the matching row list.
+     */
+    public boolean hasMatch(String qGram) {
+        if (qGram == null || qGram.isEmpty() || suffixArray.isEmpty()) {
+            return false;
+        }
+        return findMatchRange(qGram, true) != -1;
+    }
+
+    /**
+     * Number of suffixes starting with the qGram (the n / m of the 1/(n·m)
+     * goodness score). Computed from the range boundaries without collecting
+     * the row indices.
+     */
+    public int countMatches(String qGram) {
+        if (qGram == null || qGram.isEmpty() || suffixArray.isEmpty()) {
+            return 0;
+        }
+        int startIndex = findMatchRange(qGram, true);
+        if (startIndex == -1) {
+            return 0;
+        }
+        int endIndex = findMatchRange(qGram, false);
+        return endIndex - startIndex + 1;
+    }
+
+    /**
      * Binary search to find the range of suffixes that starts with the qGram.
      */
     private int findMatchRange(String qGram, boolean isSearchForFirstMatch) {

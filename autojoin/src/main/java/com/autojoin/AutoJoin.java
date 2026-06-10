@@ -1,5 +1,8 @@
 package com.autojoin;
 
+import com.autojoin.fuzzy_join.ConstrainedFuzzyJoin;
+import com.autojoin.fuzzy_join.FuzzyJoinResult;
+import com.autojoin.model.Column;
 import com.autojoin.model.Row;
 import com.autojoin.model.Table;
 import com.autojoin.operator.ConstantOp;
@@ -25,6 +28,7 @@ import com.autojoin.trace.SampleMatch;
 import com.autojoin.trace.TransformStep;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -301,13 +305,88 @@ public class AutoJoin {
 
         if (joinedPairs.isEmpty()) return DirectionResult.empty();
 
-        ApplicationTrace applicationTrace = buildApplicationTrace(joinedPairs, learned, sourceTable);
+        // Phase 4 (paper §5): constrained fuzzy join recovery of the rows the
+        // strict equi-join left unmatched.
+        List<Row[]> recoveredPairs = fuzzyRecover(learned, sourceTable, targetTable);
+        List<Row[]> allPairs = joinedPairs;
+        if (!recoveredPairs.isEmpty()) {
+            allPairs = new ArrayList<>(joinedPairs);
+            allPairs.addAll(recoveredPairs);
+        }
+        if (debug) System.err.printf("  [fuzzy] recovered %d of unmatched rows%n", recoveredPairs.size());
+
+        ApplicationTrace applicationTrace = buildApplicationTrace(allPairs, learned, sourceTable);
 
         DirectionTrace directionTrace = new DirectionTrace(discoveryTrace, learningTrace, applicationTrace);
 
         return new DirectionResult(
-                JoinResult.of(joinedPairs, learned.program.describe()),
+                JoinResult.of(allPairs, learned.program.describe()),
                 learned.score,
                 directionTrace);
+    }
+
+    /**
+     * §5 constrained fuzzy join recovery. The transformation equi-join only
+     * emits clean 1:1 matches, so rows whose derived key narrowly misses the
+     * target (e.g. formatting noise like a trailing space) stay unmatched even
+     * when the transform is right. This pass fuzzy-matches ONLY those leftover
+     * source rows against ONLY the leftover target rows, with the distance
+     * threshold auto-tuned over the full columns — already-joined values
+     * constrain it, so no equi-joined row can gain a second (wrong) match and
+     * ambiguous matches the equi-join deliberately dropped are not re-admitted.
+     */
+    private static List<Row[]> fuzzyRecover(LearnedTransformation learned,
+                                            Table sourceTable, Table targetTable) {
+        Optional<Column> tgtColOpt = targetTable.getColumn(learned.targetColumnName);
+        if (tgtColOpt.isEmpty()) return List.of();
+        List<String> targetVals = tgtColOpt.get().getValues();
+
+        // Derive every source key once.
+        int n = sourceTable.numRows();
+        List<String> derived = new ArrayList<>(n);
+        Map<String, Integer> derivedCounts = new HashMap<>();
+        for (int i = 0; i < n; i++) {
+            String[] rowArr = sourceTable.getRow(i).getValues().toArray(new String[0]);
+            String d = learned.program.apply(rowArr);
+            derived.add(d);
+            if (d != null) derivedCounts.merge(d, 1, Integer::sum);
+        }
+        Map<String, Integer> targetValueCounts = new HashMap<>();
+        for (String v : targetVals) {
+            targetValueCounts.merge(v, 1, Integer::sum);
+        }
+
+        // Mirror applyJoin's emission criterion (unique on both sides) to flag
+        // the rows the equi-join already covered.
+        boolean[] srcMatched = new boolean[n];
+        boolean anyUnmatchedSrc = false;
+        for (int i = 0; i < n; i++) {
+            String d = derived.get(i);
+            srcMatched[i] = d != null
+                    && derivedCounts.get(d) == 1
+                    && Integer.valueOf(1).equals(targetValueCounts.get(d));
+            if (!srcMatched[i]) anyUnmatchedSrc = true;
+        }
+        boolean[] tgtMatched = new boolean[targetVals.size()];
+        boolean anyUnmatchedTgt = false;
+        for (int j = 0; j < targetVals.size(); j++) {
+            String v = targetVals.get(j);
+            tgtMatched[j] = v != null
+                    && targetValueCounts.get(v) == 1
+                    && Integer.valueOf(1).equals(derivedCounts.get(v));
+            if (!tgtMatched[j]) anyUnmatchedTgt = true;
+        }
+        if (!anyUnmatchedSrc || !anyUnmatchedTgt) return List.of();
+
+        List<FuzzyJoinResult> recovered = new ConstrainedFuzzyJoin()
+                .recoverUnmatched(derived, targetVals, srcMatched, tgtMatched);
+
+        List<Row[]> pairs = new ArrayList<>(recovered.size());
+        for (FuzzyJoinResult r : recovered) {
+            pairs.add(new Row[]{
+                    sourceTable.getRow(r.sourceRowIndex),
+                    targetTable.getRow(r.targetRowIndex)});
+        }
+        return pairs;
     }
 }

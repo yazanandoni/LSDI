@@ -36,14 +36,28 @@ public class TransformationLearner {
 
     private static final int TOP_K = 20;
     private static final int SUBSET_SIZE = 3;
-    // Number of random-subset trials per group (the paper's T). Proposition 3
-    // (§3.2) shows the learning failure probability drops exponentially in T.
-    // More trials let the high-coverage transform surface even when the top-k
-    // mixes easy exact-match pairs with the transform-requiring pairs (e.g.
-    // Beatles), and raise the odds of sampling a clean all-corresponding subset
-    // on noisy column pairs. Doomed pairs are still cut early by
-    // MAX_GROUP_ABORTS, bounding the extra cost.
+    // Number of random-subset trials per group (Algorithm 4's r / the T of
+    // the Appendix H success bound, which uses T = 128). The paper's value is
+    // affordable on their hardware; empirically on our benchmarks 128 trials
+    // produced identical join results to 12 at ~5x the runtime (the score
+    // plateaus almost immediately), so we keep the budget small. Failure
+    // probability drops exponentially in T (Proposition 3), so raise this if
+    // a dataset's transform is being missed rather than mis-ranked.
     private static final int SUBSETS_PER_GROUP = 12;
+
+    // Algorithm 4's L: global cap on example sets across ALL column-pair
+    // groups. Groups are processed in descending order of average q-gram
+    // score, so the budget is spent on the most promising column pairs first
+    // and a table with many junk column pairs cannot blow up the runtime.
+    private static final int MAX_TOTAL_SUBSETS = 512;
+
+    // Stagnation cutoff: stop a group's trials after this many consecutive
+    // attempts that fail to improve the group's best score. The exponential
+    // success bound (Appendix H) means a better transform that exists is
+    // overwhelmingly likely to surface within a window this large, so once
+    // the score plateaus the remaining trials of the 128 ceiling would almost
+    // surely just re-confirm the incumbent — at full synthesis cost each.
+    private static final int STAGNATION_LIMIT = 16;
 
     /**
      * Minimum length of a derived key for it to count toward the injective score.
@@ -115,7 +129,45 @@ public class TransformationLearner {
                                        Table targetTable) {
         LearnedTransformation best = null;
 
-        for (ColumnPairMatches group : columnPairMatches) {
+        // Algorithm 4: go through groups in descending order of average q-gram
+        // score, so the global subset budget is consumed by the most promising
+        // column pairs first. Kept matches are all 1-to-1 (goodness 1.0), so
+        // scores usually tie — break ties by match COUNT: a column pair with
+        // hundreds of unique q-gram matches (e.g. Title->Title) is far more
+        // likely the real join than one with a handful of coincidental hits.
+        List<ColumnPairMatches> orderedGroups = new ArrayList<>(columnPairMatches);
+        orderedGroups.sort((a, b) -> {
+            int byScore = Double.compare(avgScore(b), avgScore(a));
+            if (byScore != 0) return byScore;
+            return Integer.compare(b.getMatches().size(), a.getMatches().size());
+        });
+
+        int totalSubsets = 0;
+
+        // Strongest group's evidence, for relative pruning below.
+        int maxMatches = 0;
+        for (ColumnPairMatches g : orderedGroups) {
+            maxMatches = Math.max(maxMatches, g.getMatches().size());
+        }
+
+        for (ColumnPairMatches group : orderedGroups) {
+            if (totalSubsets >= MAX_TOTAL_SUBSETS) break; // Algorithm 4's L cap
+
+            // Evidence pruning: a group with under 10% of the strongest
+            // group's 1:1 q-gram matches is almost certainly a coincidental
+            // column pairing (e.g. Title->Lead vocal(s) with 4 matches vs
+            // Title->Title with 271). Synthesis on its garbage examples
+            // reliably runs the search guard to exhaustion (~1s per attempt),
+            // so these groups dominate runtime while contributing nothing.
+            // The threshold is relative, so small tables — where every group
+            // has only a handful of matches — are unaffected.
+            if (group.getMatches().size() * 10 < maxMatches) {
+                if (DEBUG) System.err.printf(
+                        "  [learn] pruning group %s->%s (%d matches vs max %d)%n",
+                        group.getSourceColumnName(), group.getTargetColumnName(),
+                        group.getMatches().size(), maxMatches);
+                continue;
+            }
             String srcColName = group.getSourceColumnName();
             String tgtColName = group.getTargetColumnName();
 
@@ -133,17 +185,36 @@ public class TransformationLearner {
             List<int[]> pairs = buildPairs(topK);
             if (pairs.isEmpty()) continue;
 
-            // Generate random subsets of size b
-            List<List<int[]>> subsets = randomSubsets(pairs, SUBSET_SIZE, SUBSETS_PER_GROUP);
+            // Generate random subsets of size b, respecting the remaining
+            // global budget (Algorithm 4's L).
+            int groupBudget = Math.min(SUBSETS_PER_GROUP, MAX_TOTAL_SUBSETS - totalSubsets);
+            List<List<int[]>> subsets = randomSubsets(pairs, SUBSET_SIZE, groupBudget);
+
+            // Target-side key frequencies are fixed per group; compute them once
+            // instead of once per scored candidate program.
+            Map<String, Integer> targetValueCounts = new HashMap<>();
+            for (String v : tgtCol.getValues()) {
+                targetValueCounts.merge(v, 1, Integer::sum);
+            }
 
             long groupStart = System.nanoTime();
             int attempts = 0, slowAttempts = 0, aborts = 0;
+            int groupBestScore = 0, sinceImprovement = 0;
 
             for (List<int[]> subset : subsets) {
+                if (sinceImprovement >= STAGNATION_LIMIT) {
+                    if (DEBUG) System.err.printf(
+                            "    [learn] %s->%s plateaued after %d attempts (best=%d)%n",
+                            srcColName, tgtColName, attempts, groupBestScore);
+                    break;
+                }
+
                 List<ExamplePair> examples = toExamplePairs(subset, sourceTable, tgtCol);
                 if (examples.isEmpty()) continue;
 
                 attempts++;
+                totalSubsets++;
+                sinceImprovement++;
                 long t0 = System.nanoTime();
                 TransformationProgram program = synthesizer.tryLearnTransform(examples);
                 long ms = (System.nanoTime() - t0) / 1_000_000;
@@ -157,7 +228,9 @@ public class TransformationLearner {
 
                 // Doomed-pair early stop: if multiple subsets exhaust the search
                 // guard without yielding a program, the column pair almost
-                // certainly does not join — stop wasting attempts on it.
+                // certainly does not join — stop wasting attempts on it. Each
+                // guard-aborted attempt costs nearly a second on wide text
+                // columns, so cutting these dominates the learning runtime.
                 if (synthesizer.lastAttemptAborted() && ++aborts >= MAX_GROUP_ABORTS) {
                     if (DEBUG) System.err.printf(
                             "    [learn] abandoning %s->%s after %d aborts%n",
@@ -171,10 +244,17 @@ public class TransformationLearner {
                 // source row and collapse every row onto one fixed key.
                 if (isConstantOnly(program)) continue;
 
-                int score = computeScore(program, sourceTable, tgtCol);
+                int score = computeScore(program, sourceTable, targetValueCounts);
                 if (score < 1) continue; // no clean 1:1 match — not a real join
+                if (score > groupBestScore) {
+                    groupBestScore = score;
+                    sinceImprovement = 0;
+                }
                 if (best == null || score > best.score) {
                     best = new LearnedTransformation(program, srcColName, tgtColName, score);
+                    if (DEBUG) System.err.printf(
+                            "    [learn] NEW BEST score=%d  %s%n      examples=%s%n",
+                            score, program.describe(), describeExamples(examples));
                 }
             }
 
@@ -218,13 +298,7 @@ public class TransformationLearner {
      */
     static int computeScore(TransformationProgram program,
                             Table sourceTable,
-                            Column targetKeyColumn) {
-        // How many target rows hold each target key value.
-        Map<String, Integer> targetValueCounts = new HashMap<>();
-        for (String v : targetKeyColumn.getValues()) {
-            targetValueCounts.merge(v, 1, Integer::sum);
-        }
-
+                            Map<String, Integer> targetValueCounts) {
         // How many source rows produce each derived value.
         Map<String, Integer> derivedCounts = new HashMap<>();
         for (int i = 0; i < sourceTable.numRows(); i++) {
@@ -318,6 +392,15 @@ public class TransformationLearner {
     // Helpers
     // -------------------------------------------------------------------------
 
+    /** Average q-gram goodness of a group's matches (Algorithm 4 group order). */
+    private static double avgScore(ColumnPairMatches group) {
+        List<MatchResult> matches = group.getMatches();
+        if (matches.isEmpty()) return 0.0;
+        double sum = 0;
+        for (MatchResult m : matches) sum += m.getScore();
+        return sum / matches.size();
+    }
+
     private static List<int[]> buildPairs(List<MatchResult> matches) {
         List<int[]> pairs = new ArrayList<>();
         for (MatchResult m : matches) {
@@ -353,9 +436,13 @@ public class TransformationLearner {
     }
 
     private static String subsetKey(List<int[]> subset) {
-        StringBuilder sb = new StringBuilder();
-        for (int[] p : subset) sb.append(p[0]).append(':').append(p[1]).append(',');
-        return sb.toString();
+        // Order-independent key: the same 3 pairs drawn in a different shuffle
+        // order are the same example set — each duplicate would otherwise cost
+        // a full (identical) synthesis attempt.
+        List<String> parts = new ArrayList<>(subset.size());
+        for (int[] p : subset) parts.add(p[0] + ":" + p[1]);
+        Collections.sort(parts);
+        return String.join(",", parts);
     }
 
     private static List<ExamplePair> toExamplePairs(List<int[]> pairs,

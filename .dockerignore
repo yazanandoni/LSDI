@@ -1,0 +1,17 @@
+# Locked/runtime DB files (cause "file is locked" build errors)
+**/ruvector.db
+**/agentdb.rvf
+**/agentdb.rvf.lock
+
+# Build output (regenerated inside the image)
+**/target
+
+# Runtime data & docs not needed to compile
+autojoin/data
+autojoin/docs
+
+# Node / git / IDE
+**/node_modules
+.git
+.idea
+.vscode

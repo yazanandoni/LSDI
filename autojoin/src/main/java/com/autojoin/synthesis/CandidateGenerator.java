@@ -116,13 +116,23 @@ final class CandidateGenerator {
 
     private static void enumerateSubstrOps(int k, List<String> elems, Casing casing,
                                             List<ExamplePair> examples, List<ScoredOp> out) {
-        String elem0 = elems.get(0);
+        // start must stay below the SHORTEST example (beyond it the output is
+        // empty on that example and addIfValid rejects); fixed lengths run up
+        // to the LONGEST example so truncation points on longer examples are
+        // reachable — anchoring to the first example made the search space
+        // depend on subset sampling order (e.g. beatles: len=32 = first
+        // example's length, blind to the valid len=38 that disambiguates
+        // "...Club Band" from "...Club Band (Reprise)"). Lengths beyond every
+        // example clamp to identical outputs and collapse in the fingerprint
+        // dedupe, so this adds only genuinely distinct candidates.
+        int minLen = minLength(elems);
+        int maxLen = maxLength(elems);
 
-        for (int start = 0; start < elem0.length(); start++) {
+        for (int start = 0; start < minLen; start++) {
             // length = -1 (take to end)
             addIfValid(new SubstrOp(k, start, -1, casing), examples, out);
             // fixed lengths (capped: real key components are short)
-            int maxEnd = Math.min(elem0.length(), start + MAX_SUBSTR_LEN);
+            int maxEnd = Math.min(maxLen, start + MAX_SUBSTR_LEN);
             for (int end = start + 1; end <= maxEnd; end++) {
                 addIfValid(new SubstrOp(k, start, end - start, casing), examples, out);
             }
@@ -163,10 +173,11 @@ final class CandidateGenerator {
                                                   List<String> parts, Casing casing,
                                                   List<ExamplePair> examples,
                                                   List<ScoredOp> out) {
-        String part0 = parts.get(0);
-        for (int start = 0; start < part0.length(); start++) {
+        int minLen = minLength(parts);
+        int maxLen = maxLength(parts);
+        for (int start = 0; start < minLen; start++) {
             addIfValid(new SplitSubstrOp(k, sep, m, start, -1, casing), examples, out);
-            int maxEnd = Math.min(part0.length(), start + MAX_SUBSTR_LEN);
+            int maxEnd = Math.min(maxLen, start + MAX_SUBSTR_LEN);
             for (int end = start + 1; end <= maxEnd; end++) {
                 addIfValid(new SplitSubstrOp(k, sep, m, start, end - start, casing), examples, out);
             }
@@ -221,11 +232,12 @@ final class CandidateGenerator {
                                                        Casing casing,
                                                        List<ExamplePair> examples,
                                                        List<ScoredOp> out) {
-        String part0 = finalParts.get(0);
-        for (int start = 0; start < part0.length(); start++) {
+        int minLen = minLength(finalParts);
+        int maxLen = maxLength(finalParts);
+        for (int start = 0; start < minLen; start++) {
             addIfValid(new SplitSplitSubstrOp(k1, sep1, k2, sep2, m, start, -1, casing),
                     examples, out);
-            int maxEnd = Math.min(part0.length(), start + MAX_SUBSTR_LEN);
+            int maxEnd = Math.min(maxLen, start + MAX_SUBSTR_LEN);
             for (int end = start + 1; end <= maxEnd; end++) {
                 addIfValid(new SplitSplitSubstrOp(k1, sep1, k2, sep2, m, start, end - start, casing),
                         examples, out);
@@ -296,6 +308,18 @@ final class CandidateGenerator {
         if (hasLower) casings.add(Casing.LOWER);
         if (hasUpper) { casings.add(Casing.UPPER); casings.add(Casing.TITLE); }
         return casings;
+    }
+
+    private static int minLength(List<String> strings) {
+        int min = Integer.MAX_VALUE;
+        for (String s : strings) min = Math.min(min, s.length());
+        return min;
+    }
+
+    private static int maxLength(List<String> strings) {
+        int max = 0;
+        for (String s : strings) max = Math.max(max, s.length());
+        return max;
     }
 
     /** Get the value at column k for each example row; null if any row is too short. */

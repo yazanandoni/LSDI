@@ -20,8 +20,6 @@ public class QGramFinder {
         double bestScore = -1.0;
         int bestN = 0;
         int bestM = 0;
-        List<Integer> bestSourceRows = new ArrayList<>();
-        List<Integer> bestTargetRows = new ArrayList<>();
 
         // Iterate through all suffixes of 'v'
         for (int i = 0; i < v.length(); i++) {
@@ -38,27 +36,27 @@ public class QGramFinder {
             if (q < MIN_QGRAM_LENGTH) continue; // no match of length >= 3 (line 9: q* < 3)
 
             String longestMatchingPrefix = suffix.substring(0, q);
-            List<Integer> targetMatchesForPrefix = targetIdx.findMatches(longestMatchingPrefix);
 
-            // Score it and compare against the GLOBAL best.
-            {
-                List<Integer> sourceMatches = sourceIdx.findMatches(longestMatchingPrefix);
-                int n = sourceMatches.size();
-                int m = targetMatchesForPrefix.size();
+            // Score via match counts only; the row lists are materialized once,
+            // for the winning q-gram, after the loop.
+            int n = sourceIdx.countMatches(longestMatchingPrefix);
+            int m = targetIdx.countMatches(longestMatchingPrefix);
 
-                double score = 1.0 / (n * m); // score for this specific suffix
+            double score = 1.0 / (n * m); // score for this specific suffix
 
-                // Is this suffix's best prefix better than the overall winner?
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestN = n;
-                    bestM = m;
-                    bestQGram = longestMatchingPrefix;
-                    bestSourceRows = sourceMatches;
-                    bestTargetRows = targetMatchesForPrefix;
-                }
+            // Is this suffix's best prefix better than the overall winner?
+            if (score > bestScore) {
+                bestScore = score;
+                bestN = n;
+                bestM = m;
+                bestQGram = longestMatchingPrefix;
             }
         }
+
+        List<Integer> bestSourceRows = bestQGram == null
+                ? new ArrayList<>() : sourceIdx.findMatches(bestQGram);
+        List<Integer> bestTargetRows = bestQGram == null
+                ? new ArrayList<>() : targetIdx.findMatches(bestQGram);
 
         return new MatchResult(bestQGram, bestScore, bestN, bestM, bestSourceRows, bestTargetRows);
     }
@@ -76,7 +74,7 @@ public class QGramFinder {
         int b = suffix.length() + 1;    // exclusive upper bound (paper: b ← Length(u)+1)
         while (a < b) {
             int h = a + (b - a) / 2;
-            if (!targetIdx.findMatches(suffix.substring(0, h)).isEmpty()) {
+            if (targetIdx.hasMatch(suffix.substring(0, h))) {
                 a = h + 1;              // length h matches → try longer
             } else {
                 b = h;                  // length h has no match → must be shorter
