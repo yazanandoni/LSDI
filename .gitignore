@@ -1,7 +1,8 @@
 # Default ignored files
 /shelf/
 /.idea/workspace.xml
-target/
+**/target/
+**/.idea/
 
 # Ruflo / claude-flow plugin artifacts (added by `ruflo init`)
 CLAUDE.md

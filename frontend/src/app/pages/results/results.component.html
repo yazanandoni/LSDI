@@ -1,0 +1,117 @@
+<section class="container section">
+  <a class="back-link" routerLink="/benchmarks">← Back to Benchmarks</a>
+  <div class="section__header">
+    <div>
+      <p class="eyebrow">Benchmark results</p>
+      <h2>Inspect performance and mismatches</h2>
+    </div>
+    <p class="helper">Click a run to view diagnostics and mismatch samples.</p>
+  </div>
+
+  <div class="grid layout">
+    <div class="card results-list">
+      <h3>Runs</h3>
+      <div class="results-list__item"
+           *ngFor="let result of results"
+           (click)="selectResult(result)"
+           [class.results-list__item--active]="selectedResult?.resultId === result.resultId">
+        <div>
+          <p class="label">{{ result.pairId }}</p>
+          <p class="direction">{{ result.direction }}</p>
+          <p class="duration">{{ result.durationMs }}ms</p>
+        </div>
+        <div class="metrics">
+          <span>P {{ result.precision | number: '1.2-2' }}</span>
+          <span>R {{ result.recall | number: '1.2-2' }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card results-detail" *ngIf="selectedResult; else emptyState">
+      <div class="results-detail__header">
+        <div>
+          <p class="label">{{ selectedResult.pairId }}</p>
+          <h3>{{ selectedResult.direction }}</h3>
+          <p class="helper">Transform: {{ selectedResult.transformation || 'n/a' }}</p>
+        </div>
+        <div class="stats">
+          <div>
+            <span>Precision</span>
+            <strong>{{ selectedResult.precision | number: '1.2-2' }}</strong>
+          </div>
+          <div>
+            <span>Recall</span>
+            <strong>{{ selectedResult.recall | number: '1.2-2' }}</strong>
+          </div>
+          <div>
+            <span>True positives</span>
+            <strong>{{ selectedResult.truePositives }}</strong>
+          </div>
+        </div>
+        <div class="stats duration-stats">
+          <div>
+            <span>Duration</span>
+            <strong>{{ selectedResult.durationMs }}ms</strong>
+          </div>
+          <div>
+            <a class="btn btn--secondary"
+               [href]="'http://localhost:8080/api/results/' + selectedResult.resultId + '/csv'"
+               download>Download CSV</a>
+          </div>
+          <div>
+            <button class="btn btn--secondary" (click)="viewTrace(selectedResult)">
+              View Trace →
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid diag">
+        <div class="card diag__panel">
+          <h4>Counts</h4>
+          <p>Joined pairs: {{ selectedResult.joinedPairs }}</p>
+          <p>Ground truth: {{ selectedResult.groundTruthPairs }}</p>
+        </div>
+        <div class="card diag__panel">
+          <h4>Mismatches</h4>
+          <p>Total: {{ selectedResult.mismatches.length }}</p>
+          <p>Sampled: {{ selectedResult.mismatches.length }}</p>
+        </div>
+      </div>
+
+      <div class="grid charts">
+        <div class="card chart">
+          <div id="precisionChart" class="chart__canvas"></div>
+        </div>
+        <div class="card chart">
+          <div id="breakdownChart" class="chart__canvas"></div>
+        </div>
+      </div>
+
+      <div class="card mismatch-table" *ngIf="selectedResult && selectedResult.mismatches.length > 0; else noMismatch">
+        <h4>Mismatch samples</h4>
+        <div class="mismatch" *ngFor="let mismatch of selectedResult.mismatches | slice:0:5">
+          <p class="mono">{{ mismatch.sourceFingerprint }}</p>
+          <p>
+            Joined: <strong>{{ mismatch.joinedTarget }}</strong>
+          </p>
+          <p>
+            Expected: <strong>{{ (mismatch.expectedTarget && mismatch.expectedTarget.length > 0 ? mismatch.expectedTarget.join(', ') : 'No ground truth entry') }}</strong>
+          </p>
+        </div>
+      </div>
+
+      <ng-template #noMismatch>
+        <div class="card empty">
+          <p>No mismatches reported for this run.</p>
+        </div>
+      </ng-template>
+    </div>
+
+    <ng-template #emptyState>
+      <div class="card empty">
+        <p>No results available yet. Run a benchmark to populate this view.</p>
+      </div>
+    </ng-template>
+  </div>
+</section>

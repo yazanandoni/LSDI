@@ -1,0 +1,66 @@
+.section {
+  padding: 2rem 0;
+}
+
+.section__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+.upload {
+  padding: 2rem;
+  display: grid;
+  gap: 1.5rem;
+}
+
+.dropzone {
+  border: 2px dashed rgba(15, 76, 92, 0.25);
+  border-radius: var(--radius-md);
+  padding: 2.5rem;
+  text-align: center;
+  background: rgba(15, 76, 92, 0.04);
+}
+
+.note {
+  color: var(--ink-500);
+}
+
+.helper {
+  color: var(--ink-500);
+  margin: 0;
+}
+
+.eyebrow {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ocean-500);
+  margin: 0;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.7rem 1.4rem;
+  border-radius: 999px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn--primary {
+  margin-top: 1rem;
+  background: var(--ocean-500);
+  color: white;
+  box-shadow: var(--shadow-sm);
+}
+
+.btn--primary:hover {
+  background: var(--ocean-700);
+}
