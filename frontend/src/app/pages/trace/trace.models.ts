@@ -54,6 +54,14 @@ export interface LearningTrace {
   demoInput: string;
   demoTarget: string;
   transformDemo: TransformStep[];
+  demoMatches: DemoMatch[];
+}
+
+export interface DemoMatch {
+  sourceValue: string;
+  transformedKey: string;
+  targetValue: string;
+  matches: boolean;
 }
 
 export interface ExamplePairData {

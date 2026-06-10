@@ -12,9 +12,10 @@ public class LearningTrace {
     private final String demoInput;
     private final String demoTarget;
     private final List<TransformStep> transformDemo;
+    private final List<DemoMatch> demoMatches;
 
     public LearningTrace() {
-        this("", "", 0, 0, List.of(), List.of(), "", "", List.of());
+        this("", "", 0, 0, List.of(), List.of(), "", "", List.of(), List.of());
     }
 
     public LearningTrace(String sourceColumnName, String targetColumnName,
@@ -22,7 +23,8 @@ public class LearningTrace {
                          List<ExamplePairData> examplePairs,
                          List<OperatorNode> operators,
                          String demoInput, String demoTarget,
-                         List<TransformStep> transformDemo) {
+                         List<TransformStep> transformDemo,
+                         List<DemoMatch> demoMatches) {
         this.sourceColumnName = sourceColumnName;
         this.targetColumnName = targetColumnName;
         this.injectiveScore = injectiveScore;
@@ -32,6 +34,7 @@ public class LearningTrace {
         this.demoInput = demoInput;
         this.demoTarget = demoTarget;
         this.transformDemo = transformDemo;
+        this.demoMatches = demoMatches;
     }
 
     public String getSourceColumnName() { return sourceColumnName; }
@@ -43,4 +46,5 @@ public class LearningTrace {
     public String getDemoInput() { return demoInput; }
     public String getDemoTarget() { return demoTarget; }
     public List<TransformStep> getTransformDemo() { return transformDemo; }
+    public List<DemoMatch> getDemoMatches() { return demoMatches; }
 }

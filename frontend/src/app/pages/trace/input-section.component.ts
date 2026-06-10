@@ -17,25 +17,29 @@ import { InputTablesTrace } from './trace.models';
             <span class="table-card__dims">{{ trace.source.rows }} rows · {{ trace.source.columns }} cols</span>
           </div>
           <div class="table-card__body">
-            <div class="mini-table">
-              <div class="mini-table__header">
-                @for (col of trace.source.columnNames; track col) {
-                  <span class="mini-table__th" [class.is-key]="trace.source.keyColumns.includes(col)">
-                    {{ col }}
-                    @if (trace.source.keyColumns.includes(col)) {
-                      <span class="key-badge">key</span>
-                    }
-                  </span>
-                }
-              </div>
-              @for (row of trace.source.sampleRows; track $index) {
-                <div class="mini-table__row">
-                  @for (val of row; track $index) {
-                    <span class="mini-table__td">{{ val }}</span>
+            <table class="mini-table">
+              <thead>
+                <tr>
+                  @for (col of trace.source.columnNames; track col) {
+                    <th [class.is-key]="trace.source.keyColumns.includes(col)">
+                      {{ col }}
+                      @if (trace.source.keyColumns.includes(col)) {
+                        <span class="key-badge">key</span>
+                      }
+                    </th>
                   }
-                </div>
-              }
-            </div>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of trace.source.sampleRows; track $index) {
+                  <tr>
+                    @for (val of row; track $index) {
+                      <td>{{ val }}</td>
+                    }
+                  </tr>
+                }
+              </tbody>
+            </table>
             @if (trace.source.rows > 5) {
               <p class="mini-table__more">… and {{ trace.source.rows - 5 }} more rows</p>
             }
@@ -48,25 +52,29 @@ import { InputTablesTrace } from './trace.models';
             <span class="table-card__dims">{{ trace.target.rows }} rows · {{ trace.target.columns }} cols</span>
           </div>
           <div class="table-card__body">
-            <div class="mini-table">
-              <div class="mini-table__header">
-                @for (col of trace.target.columnNames; track col) {
-                  <span class="mini-table__th" [class.is-key]="trace.target.keyColumns.includes(col)">
-                    {{ col }}
-                    @if (trace.target.keyColumns.includes(col)) {
-                      <span class="key-badge">key</span>
-                    }
-                  </span>
-                }
-              </div>
-              @for (row of trace.target.sampleRows; track $index) {
-                <div class="mini-table__row">
-                  @for (val of row; track $index) {
-                    <span class="mini-table__td">{{ val }}</span>
+            <table class="mini-table">
+              <thead>
+                <tr>
+                  @for (col of trace.target.columnNames; track col) {
+                    <th [class.is-key]="trace.target.keyColumns.includes(col)">
+                      {{ col }}
+                      @if (trace.target.keyColumns.includes(col)) {
+                        <span class="key-badge">key</span>
+                      }
+                    </th>
                   }
-                </div>
-              }
-            </div>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of trace.target.sampleRows; track $index) {
+                  <tr>
+                    @for (val of row; track $index) {
+                      <td>{{ val }}</td>
+                    }
+                  </tr>
+                }
+              </tbody>
+            </table>
             @if (trace.target.rows > 5) {
               <p class="mini-table__more">… and {{ trace.target.rows - 5 }} more rows</p>
             }
@@ -122,36 +130,41 @@ import { InputTablesTrace } from './trace.models';
 
     .table-card__body {
       padding: 0.8rem 1rem;
+      overflow-x: auto;
     }
 
     .mini-table {
-      display: grid;
-      gap: 0;
+      width: 100%;
+      border-collapse: collapse;
       font-size: 0.78rem;
     }
 
-    .mini-table__header {
-      display: flex;
-      gap: 0;
-      border-bottom: 2px solid rgba(15, 76, 92, 0.15);
-      padding-bottom: 0.3rem;
-      margin-bottom: 0.2rem;
+    .mini-table th,
+    .mini-table td {
+      text-align: left;
+      padding: 0.25rem 0.6rem 0.25rem 0;
+      white-space: nowrap;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.75rem;
     }
 
-    .mini-table__th {
-      flex: 1;
+    .mini-table thead th {
       font-weight: 600;
       font-size: 0.72rem;
       text-transform: uppercase;
       letter-spacing: 0.04em;
       color: var(--ink-500);
-      display: flex;
-      align-items: center;
-      gap: 0.3rem;
+      border-bottom: 2px solid rgba(15, 76, 92, 0.15);
+      padding-bottom: 0.3rem;
+      font-family: 'Space Grotesk', sans-serif;
     }
 
-    .mini-table__th.is-key {
+    .mini-table thead th.is-key {
       color: var(--ocean-500);
+    }
+
+    .mini-table tbody td {
+      border-bottom: 1px solid rgba(15, 76, 92, 0.04);
     }
 
     .key-badge {
@@ -162,22 +175,8 @@ import { InputTablesTrace } from './trace.models';
       padding: 0.05rem 0.35rem;
       border-radius: 3px;
       text-transform: uppercase;
-    }
-
-    .mini-table__row {
-      display: flex;
-      gap: 0;
-      padding: 0.2rem 0;
-      border-bottom: 1px solid rgba(15, 76, 92, 0.04);
-    }
-
-    .mini-table__td {
-      flex: 1;
-      font-family: 'Space Mono', monospace;
-      font-size: 0.75rem;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      margin-left: 0.3rem;
+      vertical-align: middle;
     }
 
     .mini-table__more {

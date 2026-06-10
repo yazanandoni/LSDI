@@ -16,6 +16,7 @@ import com.autojoin.synthesis.TransformationLearner.LearnedTransformation;
 import com.autojoin.trace.AlgorithmTrace;
 import com.autojoin.trace.ApplicationTrace;
 import com.autojoin.trace.ColumnPairGroup;
+import com.autojoin.trace.DemoMatch;
 import com.autojoin.trace.DirectionTrace;
 import com.autojoin.trace.DiscoveryTrace;
 import com.autojoin.trace.ExamplePairData;
@@ -157,6 +158,7 @@ public class AutoJoin {
                                                      LearnedTransformation learned,
                                                      Table sourceTable, Table targetTable) {
         List<ExamplePairData> examplePairs = List.of();
+        List<Integer> exampleRowIndices = new ArrayList<>();
         String demoInput = "";
         String demoTarget = "";
         int demoRowIndex = -1;
@@ -173,6 +175,7 @@ public class AutoJoin {
                     String srcVal = sourceTable.getRow(srcRows.get(0)).get(learned.sourceColumnName);
                     String tgtVal = targetTable.getRow(tgtRows.get(0)).get(learned.targetColumnName);
                     examplePairs.add(new ExamplePairData(srcVal, tgtVal));
+                    exampleRowIndices.add(srcRows.get(0));
                 }
                 if (!group.getMatches().isEmpty()) {
                     MatchResult first = group.getMatches().get(0);
@@ -209,6 +212,22 @@ public class AutoJoin {
             }
         }
 
+        List<DemoMatch> demoMatches = new ArrayList<>();
+        if (!learned.program.getOperators().isEmpty() && exampleRowIndices.size() > 1) {
+            int limit = Math.min(4, exampleRowIndices.size());
+            for (int i = 1; i < limit; i++) {
+                int rowIdx = exampleRowIndices.get(i);
+                String[] rowArr = sourceTable.getRow(rowIdx).getValues().toArray(new String[0]);
+                String key = learned.program.apply(rowArr);
+                String transformed = key != null ? key : "";
+                ExamplePairData pair = examplePairs.get(i);
+                demoMatches.add(new DemoMatch(
+                        pair.getSourceValue(), transformed,
+                        pair.getTargetValue(),
+                        transformed.equals(pair.getTargetValue())));
+            }
+        }
+
         return new LearningTrace(
                 learned.sourceColumnName,
                 learned.targetColumnName,
@@ -217,7 +236,8 @@ public class AutoJoin {
                 examplePairs,
                 operatorNodes,
                 demoInput, demoTarget,
-                transformDemo);
+                transformDemo,
+                demoMatches);
     }
 
     private static OperatorNode toOperatorNode(LogicalOperator op) {

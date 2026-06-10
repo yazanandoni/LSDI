@@ -1,11 +1,12 @@
 import { Component, Input } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { LearningTrace } from './trace.models';
+import { InfoTipComponent } from './info-tip.component';
 
 @Component({
   selector: 'app-learning-section',
   standalone: true,
-  imports: [DecimalPipe],
+  imports: [DecimalPipe, InfoTipComponent],
   template: `
     <div class="learning">
       @if (trace) {
@@ -20,7 +21,9 @@ import { LearningTrace } from './trace.models';
         </div>
 
         <div class="learning__score">
-          <span class="score-label">Injective Score</span>
+          <span class="score-label">Injective Score
+            <app-info-tip text="Number of source rows that form a unique 1:1 connection to a target row. Maximum equals the number of source rows." />
+          </span>
           <div class="score-bar-wrapper">
             <div class="score-bar">
               <div class="score-bar__fill" [style.width.%]="scorePercent"
@@ -81,6 +84,25 @@ import { LearningTrace } from './trace.models';
             </div>
           </div>
         </div>
+
+        @if (trace.demoMatches.length > 0) {
+          <div class="card learning__results">
+            <h4>More Examples</h4>
+            <div class="demo-results-list">
+              @for (dm of trace.demoMatches; track $index) {
+                <div class="demo-result-item" [class.demo-result-item--ok]="dm.matches"
+                     [class.demo-result-item--fail]="!dm.matches">
+                  <span class="demo-result-item__icon">{{ dm.matches ? '✓' : '✗' }}</span>
+                  <span class="mono">{{ dm.sourceValue }}</span>
+                  <span class="demo-arrow">→</span>
+                  <span class="mono key">"{{ dm.transformedKey }}"</span>
+                  <span class="demo-arrow">→</span>
+                  <span class="mono">{{ dm.targetValue || '—' }}</span>
+                </div>
+              }
+            </div>
+          </div>
+        }
       }
     </div>
   `,
@@ -144,6 +166,68 @@ import { LearningTrace } from './trace.models';
 
     .learning__demo {
       padding: 1.2rem;
+    }
+
+    .learning__results {
+      padding: 1.2rem;
+    }
+
+    .learning__results h4 {
+      margin: 0 0 0.8rem;
+      font-size: 0.9rem;
+    }
+
+    .demo-results-list {
+      display: grid;
+      gap: 0.4rem;
+    }
+
+    .demo-result-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 0.6rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.82rem;
+    }
+
+    .demo-result-item--ok {
+      background: rgba(88, 129, 87, 0.06);
+    }
+
+    .demo-result-item--fail {
+      background: rgba(209, 73, 91, 0.06);
+    }
+
+    .demo-result-item__icon {
+      font-weight: 700;
+      width: 20px;
+      text-align: center;
+    }
+
+    .demo-result-item--ok .demo-result-item__icon {
+      color: var(--moss-500);
+    }
+
+    .demo-result-item--fail .demo-result-item__icon {
+      color: var(--rose-500);
+    }
+
+    .demo-arrow {
+      color: var(--ink-500);
+      font-size: 0.8rem;
+    }
+
+    .mono {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.78rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .key {
+      color: var(--ocean-500);
     }
 
     .learning__demo h4 {
