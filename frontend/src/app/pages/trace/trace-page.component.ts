@@ -6,11 +6,12 @@ import { AlgorithmTrace } from './trace.models';
 import { TraceFlowBarComponent, FlowStep } from './trace-flow-bar.component';
 import { DiscoverySectionComponent } from './discovery-section.component';
 import { LearningSectionComponent } from './learning-section.component';
+import { ApplicationSectionComponent } from './application-section.component';
 
 @Component({
   selector: 'app-trace-page',
   standalone: true,
-  imports: [RouterLink, DecimalPipe, TraceFlowBarComponent, DiscoverySectionComponent, LearningSectionComponent],
+  imports: [RouterLink, DecimalPipe, TraceFlowBarComponent, DiscoverySectionComponent, LearningSectionComponent, ApplicationSectionComponent],
   template: `
     <section class="container section">
       <a class="back-link" [routerLink]="backLink">← Back to {{ backLabel }}</a>
@@ -58,11 +59,7 @@ import { LearningSectionComponent } from './learning-section.component';
           <div class="trace-section-connector"></div>
 
           <div class="card trace-section" id="step-apply">
-            <h3>3. Join Application</h3>
-            <p class="helper">Applying the learned transformation as an equi-join.</p>
-            <div class="placeholder">
-              <p>Sample transformations and match results will appear here in Sprint 4.</p>
-            </div>
+            <app-application-section [trace]="winningApplication" />
           </div>
 
           <div class="trace-section-connector"></div>
@@ -273,6 +270,12 @@ export class TracePageComponent implements OnInit {
     if (!this.trace) return null;
     const dirTrace = this.trace.forwardWon ? this.trace.forwardTrace : this.trace.backwardTrace;
     return dirTrace.learning;
+  }
+
+  get winningApplication() {
+    if (!this.trace) return null;
+    const dirTrace = this.trace.forwardWon ? this.trace.forwardTrace : this.trace.backwardTrace;
+    return dirTrace.application;
   }
 
   constructor(

@@ -21,13 +21,16 @@ import com.autojoin.trace.ExamplePairData;
 import com.autojoin.trace.LearningTrace;
 import com.autojoin.trace.OperatorNode;
 import com.autojoin.trace.QGramMatch;
+import com.autojoin.trace.SampleMatch;
 import com.autojoin.trace.TransformStep;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 public class AutoJoin {
 
@@ -221,6 +224,54 @@ public class AutoJoin {
         return new OperatorNode(type, description, params);
     }
 
+    private static ApplicationTrace buildApplicationTrace(List<Row[]> joinedPairs,
+                                                           LearnedTransformation learned,
+                                                           Table sourceTable) {
+        Set<String> matchedValues = new HashSet<>();
+        List<SampleMatch> samples = new ArrayList<>();
+
+        for (Row[] pair : joinedPairs) {
+            Row srcRow = pair[0];
+            Row tgtRow = pair[1];
+            String srcVal = safeGet(srcRow, learned.sourceColumnName);
+            String tgtVal = safeGet(tgtRow, learned.targetColumnName);
+            String[] rowArr = srcRow.getValues().toArray(new String[0]);
+            String key = learned.program.apply(rowArr);
+            if (samples.size() < 5) {
+                samples.add(new SampleMatch(srcVal, key != null ? key : "", tgtVal, "MATCHED"));
+            }
+            matchedValues.add(srcVal);
+        }
+
+        int addedUnmatched = 0;
+        int unmatchedCount = 0;
+        for (int i = 0; i < sourceTable.numRows(); i++) {
+            Row row = sourceTable.getRow(i);
+            String srcVal = safeGet(row, learned.sourceColumnName);
+            if (!matchedValues.contains(srcVal)) {
+                unmatchedCount++;
+                if (addedUnmatched < 3) {
+                    String[] rowArr = row.getValues().toArray(new String[0]);
+                    String key = learned.program.apply(rowArr);
+                    samples.add(new SampleMatch(srcVal, key != null ? key : "", "", "UNMATCHED"));
+                    addedUnmatched++;
+                }
+            }
+        }
+
+        return new ApplicationTrace(
+                sourceTable.numRows(),
+                joinedPairs.size(),
+                unmatchedCount,
+                samples);
+    }
+
+    private static String safeGet(Row row, String columnName) {
+        if (row == null || columnName == null) return "";
+        String val = row.get(columnName);
+        return val != null ? val : "";
+    }
+
     private DirectionResult tryDirection(Table sourceTable, Table targetTable) {
         boolean debug = Boolean.getBoolean("autojoin.debug");
         if (debug) System.err.printf("[direction] %s (%d rows) -> %s (%d rows)%n",
@@ -241,16 +292,16 @@ public class AutoJoin {
         LearnedTransformation learned = learner.learn(matches, sourceTable, targetTable);
         if (debug) System.err.printf("  [learn] total %dms%n", (System.nanoTime() - t1) / 1_000_000);
 
-        LearningTrace learningTrace = buildLearningTrace(matches, learned, sourceTable, targetTable);
-
         if (learned == null) return DirectionResult.empty();
+
+        LearningTrace learningTrace = buildLearningTrace(matches, learned, sourceTable, targetTable);
 
         List<Row[]> joinedPairs = TransformationLearner.applyJoin(
                 learned.program, sourceTable, targetTable, learned.targetColumnName);
 
-        ApplicationTrace applicationTrace = new ApplicationTrace();
-
         if (joinedPairs.isEmpty()) return DirectionResult.empty();
+
+        ApplicationTrace applicationTrace = buildApplicationTrace(joinedPairs, learned, sourceTable);
 
         DirectionTrace directionTrace = new DirectionTrace(discoveryTrace, learningTrace, applicationTrace);
 

@@ -60,4 +60,15 @@ export interface TransformStep {
 }
 
 export interface ApplicationTrace {
+  totalSourceRows: number;
+  totalMatched: number;
+  totalUnmatched: number;
+  sampleMatches: SampleMatch[];
+}
+
+export interface SampleMatch {
+  sourceValue: string;
+  transformedKey: string;
+  matchedTargetValue: string;
+  status: string;
 }
