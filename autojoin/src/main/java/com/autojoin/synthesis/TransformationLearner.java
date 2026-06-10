@@ -73,19 +73,21 @@ public class TransformationLearner {
 
     /**
      * Stop trying subsets of a column pair after this many search-guard aborts.
-     * Raised from 2 so the extra T trials (SUBSETS_PER_GROUP) are actually used:
-     * a genuinely joinable pair whose first subsets happen to draw hard, slow-to-
-     * synthesize examples (e.g. name columns padded with long date strings) gets
-     * more chances to hit a workable subset before the pair is written off. Truly
-     * non-joinable pairs still abort every attempt and are cut once this many are
-     * seen.
+     * Set to the full trial count — i.e. groups are no longer abandoned on
+     * aborts. Junk column pairs are already cut by the relative evidence
+     * pruning before any synthesis runs, so the remaining aborts come from
+     * REAL join columns whose example pool mixes good pairs with q-gram
+     * coincidences or name-style variations (texas govs, us presidents):
+     * abandoning those groups after a few poisoned subsets returned an empty
+     * join even though clean subsets existed later in the trial sequence.
      */
-    private static final int MAX_GROUP_ABORTS = 4;
+    private static final int MAX_GROUP_ABORTS = SUBSETS_PER_GROUP;
+
+    /** Attempts synthesized concurrently per wave (see learnGroup). */
+    private static final int WAVE_SIZE = 4;
 
     /** Enable verbose timing on stderr via -Dautojoin.debug=true. */
     static final boolean DEBUG = Boolean.getBoolean("autojoin.debug");
-
-    private final TransformationSynthesizer synthesizer = new TransformationSynthesizer();
 
     // -------------------------------------------------------------------------
     // Public API
@@ -127,8 +129,6 @@ public class TransformationLearner {
     public LearnedTransformation learn(List<ColumnPairMatches> columnPairMatches,
                                        Table sourceTable,
                                        Table targetTable) {
-        LearnedTransformation best = null;
-
         // Algorithm 4: go through groups in descending order of average q-gram
         // score, so the global subset budget is consumed by the most promising
         // column pairs first. Kept matches are all 1-to-1 (goodness 1.0), so
@@ -142,16 +142,23 @@ public class TransformationLearner {
             return Integer.compare(b.getMatches().size(), a.getMatches().size());
         });
 
-        int totalSubsets = 0;
-
         // Strongest group's evidence, for relative pruning below.
         int maxMatches = 0;
         for (ColumnPairMatches g : orderedGroups) {
             maxMatches = Math.max(maxMatches, g.getMatches().size());
         }
 
+        // Sequential, deterministic prep: prune junk groups and allocate the
+        // global subset budget (Algorithm 4's L) in priority order. The actual
+        // learning per group then runs in PARALLEL — groups are independent
+        // (each gets its own synthesizer; tables and match groups are only
+        // read) — and results are reduced in the same priority order, so the
+        // outcome is identical to the sequential run, including tie-breaks.
+        List<ColumnPairMatches> tasks = new ArrayList<>();
+        List<Integer> budgets = new ArrayList<>();
+        int remainingBudget = MAX_TOTAL_SUBSETS;
         for (ColumnPairMatches group : orderedGroups) {
-            if (totalSubsets >= MAX_TOTAL_SUBSETS) break; // Algorithm 4's L cap
+            if (remainingBudget <= 0) break; // Algorithm 4's L cap
 
             // Evidence pruning: a group with under 10% of the strongest
             // group's 1:1 q-gram matches is almost certainly a coincidental
@@ -168,62 +175,109 @@ public class TransformationLearner {
                         group.getMatches().size(), maxMatches);
                 continue;
             }
-            String srcColName = group.getSourceColumnName();
-            String tgtColName = group.getTargetColumnName();
+            if (group.getMatches().isEmpty()) continue;
 
-            Optional<Column> tgtColOpt = targetTable.getColumn(tgtColName);
-            if (tgtColOpt.isEmpty()) continue;
-            Column tgtCol = tgtColOpt.get();
+            int groupBudget = Math.min(SUBSETS_PER_GROUP, remainingBudget);
+            remainingBudget -= groupBudget;
+            tasks.add(group);
+            budgets.add(groupBudget);
+        }
 
-            List<MatchResult> matches = group.getMatches();
-            if (matches.isEmpty()) continue;
+        // parallelStream + collect preserves encounter order, so the reduce
+        // below sees group results in priority order regardless of which
+        // thread finished first.
+        List<LearnedTransformation> groupResults =
+                java.util.stream.IntStream.range(0, tasks.size())
+                        .parallel()
+                        .mapToObj(i -> learnGroup(tasks.get(i), budgets.get(i),
+                                sourceTable, targetTable))
+                        .collect(java.util.stream.Collectors.toList());
 
-            // Top-k matches
-            List<MatchResult> topK = matches.subList(0, Math.min(TOP_K, matches.size()));
+        LearnedTransformation best = null;
+        for (LearnedTransformation candidate : groupResults) {
+            if (candidate == null) continue;
+            if (best == null || candidate.score > best.score) {
+                best = candidate;
+                if (DEBUG) System.err.printf(
+                        "    [learn] NEW BEST score=%d  %s%n",
+                        candidate.score, candidate.program.describe());
+            }
+        }
+        return best;
+    }
 
-            // Build the pool of (sourceRowIdx, targetRowIdx) pairs
-            List<int[]> pairs = buildPairs(topK);
-            if (pairs.isEmpty()) continue;
+    /**
+     * Run the subset-sampling/synthesis loop for one column-pair group and
+     * return the group's best transformation (or null). Thread-safe: uses a
+     * private synthesizer instance and only reads shared inputs.
+     */
+    private LearnedTransformation learnGroup(ColumnPairMatches group,
+                                             int groupBudget,
+                                             Table sourceTable,
+                                             Table targetTable) {
+        String srcColName = group.getSourceColumnName();
+        String tgtColName = group.getTargetColumnName();
 
-            // Generate random subsets of size b, respecting the remaining
-            // global budget (Algorithm 4's L).
-            int groupBudget = Math.min(SUBSETS_PER_GROUP, MAX_TOTAL_SUBSETS - totalSubsets);
-            List<List<int[]>> subsets = randomSubsets(pairs, SUBSET_SIZE, groupBudget);
+        Optional<Column> tgtColOpt = targetTable.getColumn(tgtColName);
+        if (tgtColOpt.isEmpty()) return null;
+        Column tgtCol = tgtColOpt.get();
 
-            // Target-side key frequencies are fixed per group; compute them once
-            // instead of once per scored candidate program.
-            Map<String, Integer> targetValueCounts = new HashMap<>();
-            for (String v : tgtCol.getValues()) {
-                targetValueCounts.merge(v, 1, Integer::sum);
+        List<MatchResult> matches = group.getMatches();
+
+        // Top-k matches
+        List<MatchResult> topK = matches.subList(0, Math.min(TOP_K, matches.size()));
+
+        // Build the pool of (sourceRowIdx, targetRowIdx) pairs
+        List<int[]> pairs = buildPairs(topK);
+        if (pairs.isEmpty()) return null;
+
+        // Generate random subsets of size b within this group's budget.
+        List<List<int[]>> subsets = randomSubsets(pairs, SUBSET_SIZE, groupBudget);
+
+        // Target-side key frequencies are fixed per group; compute them once
+        // instead of once per scored candidate program.
+        Map<String, Integer> targetValueCounts = new HashMap<>();
+        for (String v : tgtCol.getValues()) {
+            targetValueCounts.merge(v, 1, Integer::sum);
+        }
+
+        long groupStart = System.nanoTime();
+        int attempts = 0, slowAttempts = 0, aborts = 0;
+        int sinceImprovement = 0;
+        boolean abandoned = false;
+        LearnedTransformation best = null;
+
+        // Attempts run in parallel WAVES: synthesis calls within a wave are
+        // independent (one synthesizer each — the memo is per-attempt anyway),
+        // while the early-stop decisions (abort guard, stagnation) are
+        // evaluated sequentially between waves in deterministic order. Worst
+        // case this wastes one wave of doomed attempts; in return a wave's
+        // wall time is its slowest attempt instead of the sum.
+        int waveSize = WAVE_SIZE;
+        for (int w = 0; w < subsets.size() && !abandoned; w += waveSize) {
+            if (sinceImprovement >= STAGNATION_LIMIT) {
+                if (DEBUG) System.err.printf(
+                        "    [learn] %s->%s plateaued after %d attempts (best=%d)%n",
+                        srcColName, tgtColName, attempts, best == null ? 0 : best.score);
+                break;
             }
 
-            long groupStart = System.nanoTime();
-            int attempts = 0, slowAttempts = 0, aborts = 0;
-            int groupBestScore = 0, sinceImprovement = 0;
+            List<List<int[]>> wave = subsets.subList(w, Math.min(w + waveSize, subsets.size()));
+            List<AttemptResult> results = wave.parallelStream()
+                    .map(subset -> runAttempt(subset, sourceTable, tgtCol))
+                    .collect(java.util.stream.Collectors.toList());
 
-            for (List<int[]> subset : subsets) {
-                if (sinceImprovement >= STAGNATION_LIMIT) {
-                    if (DEBUG) System.err.printf(
-                            "    [learn] %s->%s plateaued after %d attempts (best=%d)%n",
-                            srcColName, tgtColName, attempts, groupBestScore);
-                    break;
-                }
-
-                List<ExamplePair> examples = toExamplePairs(subset, sourceTable, tgtCol);
-                if (examples.isEmpty()) continue;
+            for (AttemptResult r : results) {
+                if (r == null) continue; // subset had no usable examples
 
                 attempts++;
-                totalSubsets++;
                 sinceImprovement++;
-                long t0 = System.nanoTime();
-                TransformationProgram program = synthesizer.tryLearnTransform(examples);
-                long ms = (System.nanoTime() - t0) / 1_000_000;
-                if (ms > 200) {
+                if (r.millis > 200) {
                     slowAttempts++;
                     if (DEBUG) System.err.printf(
                             "    [learn] SLOW attempt %dms  %s->%s  nodes=%d  examples=%s%n",
-                            ms, srcColName, tgtColName, synthesizer.lastNodesVisited(),
-                            describeExamples(examples));
+                            r.millis, srcColName, tgtColName, r.nodes,
+                            describeExamples(r.examples));
                 }
 
                 // Doomed-pair early stop: if multiple subsets exhaust the search
@@ -231,43 +285,78 @@ public class TransformationLearner {
                 // certainly does not join — stop wasting attempts on it. Each
                 // guard-aborted attempt costs nearly a second on wide text
                 // columns, so cutting these dominates the learning runtime.
-                if (synthesizer.lastAttemptAborted() && ++aborts >= MAX_GROUP_ABORTS) {
+                if (r.aborted && ++aborts >= MAX_GROUP_ABORTS) {
                     if (DEBUG) System.err.printf(
                             "    [learn] abandoning %s->%s after %d aborts%n",
                             srcColName, tgtColName, aborts);
+                    abandoned = true;
                     break;
                 }
 
-                if (program == null) continue;
+                if (r.program == null) continue;
 
                 // Reject degenerate constant-only programs: they ignore the
                 // source row and collapse every row onto one fixed key.
-                if (isConstantOnly(program)) continue;
+                if (isConstantOnly(r.program)) continue;
 
-                int score = computeScore(program, sourceTable, targetValueCounts);
+                int score = computeScore(r.program, sourceTable, targetValueCounts);
+                if (DEBUG) System.err.printf(
+                        "    [learn] candidate %s->%s score=%d  %s%n",
+                        srcColName, tgtColName, score, r.program.describe());
                 if (score < 1) continue; // no clean 1:1 match — not a real join
-                if (score > groupBestScore) {
-                    groupBestScore = score;
+                if (best == null || score > best.score) {
+                    best = new LearnedTransformation(r.program, srcColName, tgtColName, score);
                     sinceImprovement = 0;
                 }
-                if (best == null || score > best.score) {
-                    best = new LearnedTransformation(program, srcColName, tgtColName, score);
-                    if (DEBUG) System.err.printf(
-                            "    [learn] NEW BEST score=%d  %s%n      examples=%s%n",
-                            score, program.describe(), describeExamples(examples));
-                }
-            }
-
-            if (DEBUG) {
-                long gms = (System.nanoTime() - groupStart) / 1_000_000;
-                System.err.printf(
-                        "  [learn] group %s->%s  matches=%d topK=%d pairs=%d  attempts=%d (slow=%d)  %dms%n",
-                        srcColName, tgtColName, matches.size(), topK.size(), pairs.size(),
-                        attempts, slowAttempts, gms);
             }
         }
 
+        if (DEBUG) {
+            long gms = (System.nanoTime() - groupStart) / 1_000_000;
+            System.err.printf(
+                    "  [learn] group %s->%s  matches=%d topK=%d pairs=%d  attempts=%d (slow=%d)  %dms%n",
+                    srcColName, tgtColName, matches.size(), topK.size(), pairs.size(),
+                    attempts, slowAttempts, gms);
+        }
         return best;
+    }
+
+    /** Outcome of one synthesis attempt, carried back from a worker thread. */
+    private static final class AttemptResult {
+        final TransformationProgram program; // null if none found
+        final boolean aborted;
+        final long millis;
+        final int nodes;
+        final List<ExamplePair> examples;
+
+        AttemptResult(TransformationProgram program, boolean aborted,
+                      long millis, int nodes, List<ExamplePair> examples) {
+            this.program = program;
+            this.aborted = aborted;
+            this.millis = millis;
+            this.nodes = nodes;
+            this.examples = examples;
+        }
+    }
+
+    /**
+     * Run one synthesis attempt on its own synthesizer instance (the memo is
+     * per-attempt, so nothing is lost vs. a shared one). Safe to call from
+     * parallel worker threads. Returns null when the subset has no usable
+     * examples.
+     */
+    private static AttemptResult runAttempt(List<int[]> subset,
+                                            Table sourceTable,
+                                            Column tgtCol) {
+        List<ExamplePair> examples = toExamplePairs(subset, sourceTable, tgtCol);
+        if (examples.isEmpty()) return null;
+
+        TransformationSynthesizer synthesizer = new TransformationSynthesizer();
+        long t0 = System.nanoTime();
+        TransformationProgram program = synthesizer.tryLearnTransform(examples);
+        long ms = (System.nanoTime() - t0) / 1_000_000;
+        return new AttemptResult(program, synthesizer.lastAttemptAborted(),
+                ms, synthesizer.lastNodesVisited(), examples);
     }
 
     /** Compact one-line view of example pairs, for debug logging. */
@@ -334,16 +423,16 @@ public class TransformationLearner {
      * match against the target key column. Returns matched (sourceRow, targetRow)
      * pairs.
      *
-     * Only clean 1-to-1 matches are emitted — a derived key produced by exactly
-     * one source row AND matching exactly one target row. This is the same
-     * injective criterion {@link #computeScore} uses to select the transform, so
-     * the output is consistent with the score the transform was chosen on.
-     * Emitting ambiguous matches would silently lower precision: a lossy
-     * transform that projects away part of a composite key (e.g. extracting only
-     * the song title from a "Song - Artist" key) scores on its unique matches but
-     * would otherwise also emit wrong joins for every collision (e.g. "White
-     * Christmas" joining to the wrong cover). When a derived key is ambiguous we
-     * genuinely cannot tell which row is correct, so we omit it rather than guess.
+     * Join cardinality follows the paper's Definition 1: the target column is
+     * a KEY column, so joins are 1:1 or N:1. Target-side uniqueness is
+     * enforced (a derived key matching several target rows is ambiguous — we
+     * cannot tell which row is right, so we omit it rather than guess), but
+     * MANY source rows may join the same target row: real tables repeat
+     * entities across rows (e.g. one row per presidential TERM, with
+     * multi-term presidents appearing twice), and the per-row foreign key is
+     * still unambiguous. The transform itself is still SELECTED by the strict
+     * injective score of {@link #computeScore}, which keeps lossy projections
+     * (that collapse distinct entities onto one key) from winning.
      */
     public static List<Row[]> applyJoin(TransformationProgram program,
                                          Table sourceTable,
@@ -364,20 +453,11 @@ public class TransformationLearner {
             targetIndex.putIfAbsent(tgtCol.getValue(i), i);
         }
 
-        // How many source rows produce each derived key (for source-side uniqueness).
-        Map<String, Integer> derivedCounts = new HashMap<>();
-        for (int i = 0; i < sourceTable.numRows(); i++) {
-            String derived = program.apply(rowToArray(sourceTable.getRow(i)));
-            if (derived != null) derivedCounts.merge(derived, 1, Integer::sum);
-        }
-
         List<Row[]> results = new ArrayList<>();
         for (int i = 0; i < sourceTable.numRows(); i++) {
             String[] rowArr = rowToArray(sourceTable.getRow(i));
             String derived = program.apply(rowArr);
             if (derived == null) continue;
-            Integer dCount = derivedCounts.get(derived);
-            if (dCount == null || dCount != 1) continue;       // source-side ambiguous
             Integer tCount = targetValueCounts.get(derived);
             if (tCount == null || tCount != 1) continue;       // target-side ambiguous / no match
             Integer tgtIdx = targetIndex.get(derived);

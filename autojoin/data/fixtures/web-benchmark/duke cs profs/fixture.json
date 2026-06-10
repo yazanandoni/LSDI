@@ -5,7 +5,7 @@
     "key_columns": [
       "column 0",
       "column 1",
-      "column 1"
+      "column 2"
     ]
   },
   "target": {
@@ -32,7 +32,7 @@
     "source_key_columns": [
       "source-column 0",
       "source-column 1",
-      "source-column 1"
+      "source-column 2"
     ],
     "target_key_columns": [
       "target-Name",

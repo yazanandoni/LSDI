@@ -100,8 +100,12 @@ public class BenchmarkService {
         for (Row[] pair : result.getJoinedPairs()) {
             Row srcRow = forward ? pair[0] : pair[1];
             Row tgtRow = forward ? pair[1] : pair[0];
-            String srcFp = srcKeyCols.stream().map(srcRow::get).collect(Collectors.joining("|"));
-            String tgtFp = tgtKeyCols.stream().map(tgtRow::get).collect(Collectors.joining(" | "));
+            // Positional fingerprints: name-based lookup collapses duplicate
+            // column names (chinese provinces has two "Hanzi" target columns,
+            // us presidents 4 two "Vice President" source columns) onto one
+            // value, falsely scoring correct joins as mismatches in the UI.
+            String srcFp = positionalFingerprint(srcRow, srcKeyCols, "|");
+            String tgtFp = positionalFingerprint(tgtRow, tgtKeyCols, " | ");
             List<String> expected = gtMap.get(srcFp);
             if (expected != null && tgtFp.equals(String.join(" | ", expected))) {
                 tp++;
@@ -191,6 +195,30 @@ public class BenchmarkService {
             if (hasData && !srcFp.isBlank()) map.put(srcFp, tgtValues);
         }
         return map;
+    }
+
+    /**
+     * Build a fingerprint from a row's key columns, resolving duplicate column
+     * names positionally: the k-th occurrence of a name in keyCols maps to the
+     * k-th column of that name in the row. Mirrors BenchmarkTestHelper.
+     */
+    private static String positionalFingerprint(Row row, List<String> keyCols, String sep) {
+        List<String> rowCols = row.getColumnNames();
+        boolean[] used = new boolean[rowCols.size()];
+        List<String> parts = new ArrayList<>(keyCols.size());
+        for (String key : keyCols) {
+            int idx = -1;
+            for (int i = 0; i < rowCols.size(); i++) {
+                if (!used[i] && rowCols.get(i).equals(key)) { idx = i; break; }
+            }
+            if (idx >= 0) {
+                used[idx] = true;
+                parts.add(row.get(idx));
+            } else {
+                parts.add(row.get(key)); // key not present positionally — fall back
+            }
+        }
+        return String.join(sep, parts);
     }
 
     private boolean isForwardDirection(JoinResult result, List<String> srcKeyCols) {

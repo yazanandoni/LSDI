@@ -42,8 +42,15 @@ public class AutoJoin {
     private final TransformationLearner learner = new TransformationLearner();
 
     public JoinResult join(Table ts, Table tt) {
-        DirectionResult forward = tryDirection(ts, tt);
+        // The two directions are fully independent (discovery is stateless and
+        // the learner creates per-group synthesizers), so run them
+        // concurrently: wall time becomes max(forward, backward) instead of
+        // the sum. The backward attempt runs on this thread so a 2-direction
+        // join doesn't need a second pool thread beyond the forward task.
+        java.util.concurrent.CompletableFuture<DirectionResult> forwardFuture =
+                java.util.concurrent.CompletableFuture.supplyAsync(() -> tryDirection(ts, tt));
         DirectionResult backward = tryDirection(tt, ts);
+        DirectionResult forward = forwardFuture.join();
 
         boolean forwardWon;
         JoinResult bestJoin;
@@ -356,14 +363,13 @@ public class AutoJoin {
             targetValueCounts.merge(v, 1, Integer::sum);
         }
 
-        // Mirror applyJoin's emission criterion (unique on both sides) to flag
-        // the rows the equi-join already covered.
+        // Mirror applyJoin's emission criterion (unique target key; source-side
+        // N:1 allowed) to flag the rows the equi-join already covered.
         boolean[] srcMatched = new boolean[n];
         boolean anyUnmatchedSrc = false;
         for (int i = 0; i < n; i++) {
             String d = derived.get(i);
             srcMatched[i] = d != null
-                    && derivedCounts.get(d) == 1
                     && Integer.valueOf(1).equals(targetValueCounts.get(d));
             if (!srcMatched[i]) anyUnmatchedSrc = true;
         }
@@ -373,7 +379,7 @@ public class AutoJoin {
             String v = targetVals.get(j);
             tgtMatched[j] = v != null
                     && targetValueCounts.get(v) == 1
-                    && Integer.valueOf(1).equals(derivedCounts.get(v));
+                    && derivedCounts.getOrDefault(v, 0) >= 1;
             if (!tgtMatched[j]) anyUnmatchedTgt = true;
         }
         if (!anyUnmatchedSrc || !anyUnmatchedTgt) return List.of();

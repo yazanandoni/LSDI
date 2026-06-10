@@ -121,7 +121,11 @@ public class BenchmarkTestHelper {
             Row srcRow = forward ? pair[0] : pair[1];
             Row tgtRow = forward ? pair[1] : pair[0];
 
-            String srcFp = srcKeyCols.stream().map(srcRow::get).collect(Collectors.joining("|"));
+            // Positional, matching the scoring in BenchmarkIntegrationTest:
+            // name-based lookup collapses duplicate source column names (e.g.
+            // two "Vice President" columns) and falsely reports correct joins
+            // as "(no ground truth entry)".
+            String srcFp = positionalFingerprint(srcRow, srcKeyCols, "|");
             String tgtFp = positionalFingerprint(tgtRow, tgtKeyCols, " | ");
             List<String> expectedTgt = gtMap.get(srcFp);
 

@@ -127,7 +127,10 @@ class BenchmarkIntegrationTest {
             Row srcRow = forward ? pair[0] : pair[1];
             Row tgtRow = forward ? pair[1] : pair[0];
 
-            String srcFp = srcKeyCols.stream().map(srcRow::get).collect(Collectors.joining("|"));
+            // Positional, like the target side: duplicate source key names
+            // (e.g. duke's gt header lists "column 1" twice) would otherwise
+            // collapse onto one value and never match the ground truth.
+            String srcFp = BenchmarkTestHelper.positionalFingerprint(srcRow, srcKeyCols, "|");
             String tgtFp = BenchmarkTestHelper.positionalFingerprint(tgtRow, tgtKeyCols, " | ");
             List<String> expected = gtMap.get(srcFp);
             if (expected != null && tgtFp.equals(String.join(" | ", expected))) {
