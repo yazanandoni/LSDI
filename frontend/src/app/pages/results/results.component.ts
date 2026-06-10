@@ -1,6 +1,6 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { DecimalPipe, NgFor, NgIf, SlicePipe } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { BenchmarkService } from '../../services/benchmark.service';
 import { BenchmarkSummaryView } from '../../app.models';
 import { buildMatchBreakdownOption, buildPrecisionRecallOption } from './results-charts';
@@ -19,7 +19,10 @@ export class ResultsComponent implements OnInit, OnDestroy {
   precisionRecallChart?: echarts.ECharts;
   matchBreakdownChart?: echarts.ECharts;
 
-  constructor(private benchmarkService: BenchmarkService) {}
+  constructor(
+    private benchmarkService: BenchmarkService,
+    private router: Router
+  ) {}
 
   ngOnInit(): void {
     this.benchmarkService.listResults().subscribe((results) => {
@@ -37,6 +40,10 @@ export class ResultsComponent implements OnInit, OnDestroy {
   selectResult(result: BenchmarkSummaryView): void {
     this.selectedResult = result;
     this.updateCharts();
+  }
+
+  viewTrace(result: BenchmarkSummaryView): void {
+    this.router.navigate(['/trace', result.resultId]);
   }
 
   private updateCharts(): void {
