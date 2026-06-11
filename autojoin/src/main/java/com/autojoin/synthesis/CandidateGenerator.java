@@ -116,17 +116,77 @@ final class CandidateGenerator {
 
     private static void enumerateSubstrOps(int k, List<String> elems, Casing casing,
                                             List<ExamplePair> examples, List<ScoredOp> out) {
-        String elem0 = elems.get(0);
+        // start must stay below the SHORTEST example (beyond it the output is
+        // empty on that example and validity fails); fixed lengths run up
+        // to the LONGEST example so truncation points on longer examples are
+        // reachable. Lengths beyond every example clamp to identical outputs
+        // and collapse in the fingerprint dedupe.
+        int minLen = minLength(elems);
 
-        for (int start = 0; start < elem0.length(); start++) {
-            // length = -1 (take to end)
-            addIfValid(new SubstrOp(k, start, -1, casing), examples, out);
-            // fixed lengths (capped: real key components are short)
-            int maxEnd = Math.min(elem0.length(), start + MAX_SUBSTR_LEN);
-            for (int end = start + 1; end <= maxEnd; end++) {
-                addIfValid(new SubstrOp(k, start, end - start, casing), examples, out);
+        for (int start = 0; start < minLen; start++) {
+            final int s = start;
+            emitSubstrRange(elems, start, casing, examples,
+                    len -> new SubstrOp(k, s, len, casing), out);
+        }
+    }
+
+    /**
+     * Emit every valid fixed-length op for one (elements, start, casing)
+     * combination, plus the take-to-end (len = -1) variant.
+     *
+     * Validity is MONOTONE in length: each example's output for len is a
+     * prefix of its output for len+1 (clamped at the element end, and all
+     * casings map prefixes to prefixes), and a substring of a string contained
+     * in the target is itself contained. So the valid lengths form a prefix
+     * range [1..Lmax], and Lmax is found with ~log2(MAX_SUBSTR_LEN)
+     * containment probes by binary search instead of validating each length
+     * individually — per-node candidate generation cost was the dominant
+     * synthesis cost on wide tables (Appendix G: "physical optimizations are
+     * performed to only test meaningful parameters"). The emitted candidates,
+     * scores, and insertion order are identical to exhaustive validation.
+     */
+    private static void emitSubstrRange(List<String> elems, int start, Casing casing,
+                                        List<ExamplePair> examples,
+                                        java.util.function.IntFunction<LogicalOperator> opForLen,
+                                        List<ScoredOp> out) {
+        // length = -1 (take to end): each example's full cased tail.
+        if (validAt(elems, examples, start, Integer.MAX_VALUE, casing)) {
+            int score = 0;
+            for (String e : elems) score += e.length() - start;
+            out.add(new ScoredOp(opForLen.apply(-1), score));
+        }
+
+        // Binary search the largest valid fixed length in [1..bound].
+        int bound = Math.min(maxLength(elems) - start, MAX_SUBSTR_LEN);
+        int lo = 0, hi = bound;
+        while (lo < hi) {
+            int mid = lo + (hi - lo + 1) / 2;
+            if (validAt(elems, examples, start, mid, casing)) {
+                lo = mid;
+            } else {
+                hi = mid - 1;
             }
         }
+        for (int len = 1; len <= lo; len++) {
+            int score = 0;
+            for (String e : elems) score += Math.min(len, e.length() - start);
+            out.add(new ScoredOp(opForLen.apply(len), score));
+        }
+    }
+
+    /** True when, for every example, the cased substring [start, start+len)
+     *  of its element (clamped to the element end) is non-empty and contained
+     *  in its target — exactly addIfValid's criterion for the Substr family. */
+    private static boolean validAt(List<String> elems, List<ExamplePair> examples,
+                                   int start, int len, Casing casing) {
+        for (int i = 0; i < elems.size(); i++) {
+            String e = elems.get(i);
+            int end = (int) Math.min((long) start + len, e.length());
+            if (start >= end) return false;
+            String result = casing.apply(e.substring(start, end));
+            if (result.isEmpty() || !examples.get(i).targetValue.contains(result)) return false;
+        }
+        return true;
     }
 
     // -------------------------------------------------------------------------
@@ -163,13 +223,11 @@ final class CandidateGenerator {
                                                   List<String> parts, Casing casing,
                                                   List<ExamplePair> examples,
                                                   List<ScoredOp> out) {
-        String part0 = parts.get(0);
-        for (int start = 0; start < part0.length(); start++) {
-            addIfValid(new SplitSubstrOp(k, sep, m, start, -1, casing), examples, out);
-            int maxEnd = Math.min(part0.length(), start + MAX_SUBSTR_LEN);
-            for (int end = start + 1; end <= maxEnd; end++) {
-                addIfValid(new SplitSubstrOp(k, sep, m, start, end - start, casing), examples, out);
-            }
+        int minLen = minLength(parts);
+        for (int start = 0; start < minLen; start++) {
+            final int s = start;
+            emitSubstrRange(parts, start, casing, examples,
+                    len -> new SplitSubstrOp(k, sep, m, s, len, casing), out);
         }
     }
 
@@ -221,15 +279,11 @@ final class CandidateGenerator {
                                                        Casing casing,
                                                        List<ExamplePair> examples,
                                                        List<ScoredOp> out) {
-        String part0 = finalParts.get(0);
-        for (int start = 0; start < part0.length(); start++) {
-            addIfValid(new SplitSplitSubstrOp(k1, sep1, k2, sep2, m, start, -1, casing),
-                    examples, out);
-            int maxEnd = Math.min(part0.length(), start + MAX_SUBSTR_LEN);
-            for (int end = start + 1; end <= maxEnd; end++) {
-                addIfValid(new SplitSplitSubstrOp(k1, sep1, k2, sep2, m, start, end - start, casing),
-                        examples, out);
-            }
+        int minLen = minLength(finalParts);
+        for (int start = 0; start < minLen; start++) {
+            final int s = start;
+            emitSubstrRange(finalParts, start, casing, examples,
+                    len -> new SplitSplitSubstrOp(k1, sep1, k2, sep2, m, s, len, casing), out);
         }
     }
 
@@ -296,6 +350,18 @@ final class CandidateGenerator {
         if (hasLower) casings.add(Casing.LOWER);
         if (hasUpper) { casings.add(Casing.UPPER); casings.add(Casing.TITLE); }
         return casings;
+    }
+
+    private static int minLength(List<String> strings) {
+        int min = Integer.MAX_VALUE;
+        for (String s : strings) min = Math.min(min, s.length());
+        return min;
+    }
+
+    private static int maxLength(List<String> strings) {
+        int max = 0;
+        for (String s : strings) max = Math.max(max, s.length());
+        return max;
     }
 
     /** Get the value at column k for each example row; null if any row is too short. */

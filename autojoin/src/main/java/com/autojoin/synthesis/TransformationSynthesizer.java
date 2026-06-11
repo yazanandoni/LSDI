@@ -68,14 +68,33 @@ public class TransformationSynthesizer {
     private static final int MAX_NODES = 200_000;
 
     /**
-     * Wall-clock budget per learning attempt. The dominant cost on non-joinable
-     * column pairs is not node count but per-node candidate generation, which
-     * blows up on long, separator-rich strings (e.g. matching a song title
-     * against a multi-word "Songwriter(s)" value). A real transformation is
-     * found in well under this budget; exceeding it means the pair does not
-     * join, so we abandon the attempt.
+     * CPU-time budget per learning attempt (override with
+     * -Dautojoin.synthBudgetMs). The dominant cost on non-joinable column
+     * pairs is not node count but per-node candidate generation, which blows
+     * up on long, separator-rich strings (e.g. matching a song title against
+     * a multi-word "Songwriter(s)" value). A real transformation is found in
+     * well under this budget; exceeding it means the pair does not join, so
+     * we abandon the attempt.
+     *
+     * Measured in per-THREAD CPU time, not wall-clock: attempts now run on
+     * parallel workers, and under full-core contention a wall-clock deadline
+     * would shrink the effective budget with system load — the same benchmark
+     * case would succeed solo but abort inside a full-suite run. CPU time
+     * gives every attempt the same amount of actual work regardless of what
+     * else is running.
      */
-    private static final long BUDGET_NANOS = 800_000_000L; // 0.8 seconds
+    private static final long BUDGET_NANOS =
+            Long.getLong("autojoin.synthBudgetMs", 800L) * 1_000_000L;
+
+    private static final java.lang.management.ThreadMXBean THREAD_MX =
+            java.lang.management.ManagementFactory.getThreadMXBean();
+
+    /** Current thread's consumed CPU time, falling back to wall-clock when unsupported. */
+    private static long threadCpuNanos() {
+        return THREAD_MX.isCurrentThreadCpuTimeSupported()
+                ? THREAD_MX.getCurrentThreadCpuTime()
+                : System.nanoTime();
+    }
 
     /** Cache of solved sub-searches: (state, budget) -> learned program. */
     private Map<String, TransformationProgram> solved;
@@ -114,7 +133,7 @@ public class TransformationSynthesizer {
         solved = new HashMap<>();
         failed = new HashSet<>();
         nodesVisited = 0;
-        deadlineNanos = System.nanoTime() + BUDGET_NANOS;
+        deadlineNanos = threadCpuNanos() + BUDGET_NANOS;
         lastAborted = false;
         try {
             return search(examples, MAX_OPERATORS);
@@ -137,7 +156,7 @@ public class TransformationSynthesizer {
         // negligible next to a single node's candidate generation, so we check
         // it every node — this catches per-node cost blowups (long, separator-
         // rich strings) that the node cap alone cannot.
-        if (++nodesVisited > MAX_NODES || System.nanoTime() > deadlineNanos) {
+        if (++nodesVisited > MAX_NODES || threadCpuNanos() > deadlineNanos) {
             throw new SearchAbortedException();
         }
 

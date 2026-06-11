@@ -34,14 +34,26 @@ public class AutoJoinDiscovery {
 
     public List<ColumnPairMatches> findJoinableRowPairs(Table sourceTable, Table targetTable) {
         Map<String, List<MatchResult>> groupedMatches = new HashMap<>();
+        QGramFinder matcher = new QGramFinder();
+
+        // Build each target key column's suffix index ONCE, up front. Index
+        // construction (all suffixes + sort) dominates the discovery cost, so
+        // rebuilding it per source column would multiply that cost by the
+        // number of source columns.
+        List<Column> targetKeyColumns = targetTable.getKeyColumns();
+        List<ColumnSuffixIndex> targetIndexes = new ArrayList<>(targetKeyColumns.size());
+        for (Column ct : targetKeyColumns) {
+            targetIndexes.add(new ColumnSuffixIndex(ct.getValues()));
+        }
 
         // Iterate over all columns in the source table
         for (Column cs : sourceTable.getColumns()) {
             ColumnSuffixIndex sourceIdx = new ColumnSuffixIndex(cs.getValues());
 
             // Iterate over all KEY columns in the target table
-            for (Column ct : targetTable.getKeyColumns()) {
-                ColumnSuffixIndex targetIdx = new ColumnSuffixIndex(ct.getValues());
+            for (int t = 0; t < targetKeyColumns.size(); t++) {
+                Column ct = targetKeyColumns.get(t);
+                ColumnSuffixIndex targetIdx = targetIndexes.get(t);
 
                 String groupKey = cs.getName() + "|" + ct.getName();
                 groupedMatches.putIfAbsent(groupKey, new ArrayList<>());
@@ -51,7 +63,6 @@ public class AutoJoinDiscovery {
                 for (String v : distinctValues) {
                     if (v == null || v.isEmpty()) continue;
 
-                    QGramFinder matcher = new QGramFinder();
                     MatchResult result = matcher.findOptimalQGram(v, sourceIdx, targetIdx);
 
                     // Keep only sufficiently-unique matches (low n·m). This is
