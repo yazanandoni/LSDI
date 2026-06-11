@@ -3,15 +3,15 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { DecimalPipe } from '@angular/common';
 import { BenchmarkService } from '../../services/benchmark.service';
 import { AlgorithmTrace } from './trace.models';
-import { TraceFlowBarComponent, FlowStep } from './trace-flow-bar.component';
 import { DiscoverySectionComponent } from './discovery-section.component';
 import { LearningSectionComponent } from './learning-section.component';
 import { ApplicationSectionComponent } from './application-section.component';
+import { InputSectionComponent } from './input-section.component';
 
 @Component({
   selector: 'app-trace-page',
   standalone: true,
-  imports: [RouterLink, DecimalPipe, TraceFlowBarComponent, DiscoverySectionComponent, LearningSectionComponent, ApplicationSectionComponent],
+  imports: [RouterLink, DecimalPipe, DiscoverySectionComponent, LearningSectionComponent, ApplicationSectionComponent, InputSectionComponent],
   template: `
     <section class="container section">
       <a class="back-link" [routerLink]="backLink">← Back to {{ backLabel }}</a>
@@ -25,23 +25,9 @@ import { ApplicationSectionComponent } from './application-section.component';
       </div>
 
       @if (trace) {
-        <div class="flow-bar-wrapper">
-          <app-trace-flow-bar
-            [steps]="flowSteps"
-            [activeStep]="activeStep"
-            [completedSteps]="completedSteps"
-          />
-        </div>
-      }
-
-      @if (trace) {
         <div class="trace-content">
           <div class="card trace-section" id="step-input">
-            <h3>Input Tables</h3>
-            <p class="helper">Source and target tables loaded for this benchmark.</p>
-            <div class="placeholder">
-              <p>Table preview coming in a future sprint.</p>
-            </div>
+            <app-input-section [trace]="trace.inputTables" />
           </div>
 
           <div class="trace-section-connector"></div>
@@ -77,6 +63,10 @@ import { ApplicationSectionComponent } from './application-section.component';
                   <div>
                     <span>Recall</span>
                     <strong>{{ traceResult.recall | number:'1.2-2' }}</strong>
+                  </div>
+                  <div>
+                    <span>Duration</span>
+                    <strong>{{ traceResult.durationMs }}ms</strong>
                   </div>
                   <div>
                     <span>Direction</span>
@@ -138,13 +128,6 @@ import { ApplicationSectionComponent } from './application-section.component';
 
     .section__header h2 {
       margin: 0.4rem 0 0;
-    }
-
-    .flow-bar-wrapper {
-      position: sticky;
-      top: 88px;
-      z-index: 5;
-      margin-bottom: 2rem;
     }
 
     .trace-content {
@@ -248,17 +231,6 @@ export class TracePageComponent implements OnInit {
   error: string | null = null;
   backLink = '/results';
   backLabel = 'Results';
-
-  flowSteps: FlowStep[] = [
-    { id: 'step-input', label: 'Input' },
-    { id: 'step-discovery', label: 'Discovery' },
-    { id: 'step-learning', label: 'Learning' },
-    { id: 'step-apply', label: 'Apply' },
-    { id: 'step-results', label: 'Results' }
-  ];
-
-  activeStep = 'step-input';
-  completedSteps: Set<string> = new Set(['step-input']);
 
   get winningDiscovery() {
     if (!this.trace) return null;

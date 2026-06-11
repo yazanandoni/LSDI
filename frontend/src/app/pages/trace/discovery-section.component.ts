@@ -1,11 +1,12 @@
 import { Component, Input } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { DiscoveryTrace } from './trace.models';
+import { InfoTipComponent } from './info-tip.component';
 
 @Component({
   selector: 'app-discovery-section',
   standalone: true,
-  imports: [DecimalPipe],
+  imports: [DecimalPipe, InfoTipComponent],
   template: `
     <div class="discovery">
       @if (trace) {
@@ -60,9 +61,9 @@ import { DiscoveryTrace } from './trace.models';
               <div class="match-table">
                 <div class="match-table__header">
                   <span>Source Value</span>
-                  <span>q-gram</span>
+                  <span>q-gram <app-info-tip text="A contiguous substring of length q. The algorithm searches for shared q-grams between source and target values." /></span>
                   <span>Target Value</span>
-                  <span style="text-align: center">Score</span>
+                  <span style="text-align: center">Score <app-info-tip text="1/(n·m) — the closer to 1.0, the more unique the match. A score of 1.0 means this q-gram appears exactly once in both source and target." /></span>
                 </div>
                 @for (match of group.topMatches; track $index) {
                   <div class="match-table__row">

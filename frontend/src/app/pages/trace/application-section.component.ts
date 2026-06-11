@@ -1,9 +1,11 @@
 import { Component, Input } from '@angular/core';
 import { ApplicationTrace } from './trace.models';
+import { InfoTipComponent } from './info-tip.component';
 
 @Component({
   selector: 'app-application-section',
   standalone: true,
+  imports: [InfoTipComponent],
   template: `
     <div class="application">
       @if (trace) {
@@ -58,7 +60,7 @@ import { ApplicationTrace } from './trace.models';
             <h4>Sample Matches</h4>
             <div class="sample-table__header">
               <span>Source Value</span>
-              <span>Transformed Key</span>
+              <span>Transformed Key <app-info-tip text="The result of applying the learned transformation to the source value. This derived key is matched against the target column." /></span>
               <span>Target Value</span>
               <span></span>
             </div>
@@ -66,7 +68,7 @@ import { ApplicationTrace } from './trace.models';
               <div class="sample-table__row" [class.unmatched]="sample.status === 'UNMATCHED'">
                 <span class="mono">{{ sample.sourceValue }}</span>
                 <span class="mono key">"{{ sample.transformedKey }}"</span>
-                <span class="mono">{{ sample.matchedTargetValue || '—' }}</span>
+                <span class="mono">{{ sample.matchedTargetValue || '(no entry)' }}</span>
                 <span class="status-badge" [class.match]="sample.status === 'MATCHED'"
                       [class.no-match]="sample.status === 'UNMATCHED'">
                   {{ sample.status === 'MATCHED' ? '✓' : '✗' }}
@@ -143,12 +145,14 @@ import { ApplicationTrace } from './trace.models';
     .flow-split {
       display: flex;
       gap: 1rem;
+      align-items: stretch;
     }
 
     .flow-split__branch {
-      display: grid;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
       gap: 0.3rem;
-      justify-items: center;
     }
 
     .flow-split__arrow {
