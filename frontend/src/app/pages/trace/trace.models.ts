@@ -101,6 +101,7 @@ export interface FuzzyTrace {
   recoveredCount: number;
   optimalThreshold: number;
   unmatchedBeforeFuzzy: number;
+  remainingUnmatched: number;
   sampleRecovered: FuzzyRecoveryMatch[];
 }
 

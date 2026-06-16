@@ -369,6 +369,11 @@ public class AutoJoin {
 
         if (joinedPairs.isEmpty()) return DirectionResult.empty();
 
+        // Application trace: built BEFORE fuzzy recovery so it shows only
+        // equi-joined pairs (the fuzzy step picks up the rest afterwards).
+        ApplicationTrace applicationTrace = buildApplicationTrace(
+                joinedPairs, learned, sourceTable);
+
         // Phase 4 (paper §5): constrained fuzzy join recovery of the rows the
         // strict equi-join left unmatched.
         FuzzyRecoveryResult fuzzyResult = fuzzyRecover(learned, sourceTable, targetTable);
@@ -386,15 +391,15 @@ public class AutoJoin {
                 String tgtVal = safeGet(targetTable.getRow(fr.targetRowIndex), learned.targetColumnName);
                 samples.add(new FuzzyRecoveryMatch(srcVal, tgtVal, fr.distance));
             }
+            int remaining = fuzzyResult.unmatchedBeforeFuzzy() - fuzzyResult.pairs().size();
             fuzzyTrace = new FuzzyTrace(
                     fuzzyResult.pairs().size(),
                     fuzzyResult.threshold(),
                     fuzzyResult.unmatchedBeforeFuzzy(),
+                    remaining,
                     samples);
         }
         if (debug) System.err.printf("  [fuzzy] recovered %d of unmatched rows%n", fuzzyResult.pairs().size());
-
-        ApplicationTrace applicationTrace = buildApplicationTrace(allPairs, learned, sourceTable);
 
         DirectionTrace directionTrace = new DirectionTrace(discoveryTrace, learningTrace, applicationTrace, fuzzyTrace);
 

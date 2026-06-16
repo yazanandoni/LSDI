@@ -39,9 +39,21 @@ import { InfoTipComponent } from './info-tip.component';
               <path d="M4 12h20M24 6l6 6-6 6" stroke="var(--ocean-300)" stroke-width="2" fill="none" stroke-linecap="round"/>
             </svg>
           </div>
-          <div class="flow-node flow-node--success">
-            <div class="flow-node__count">{{ trace.recoveredCount }}</div>
-            <div class="flow-node__label">Recovered ✓</div>
+          <div class="flow-split">
+            <div class="flow-split__branch">
+              <div class="flow-split__arrow">↓</div>
+              <div class="flow-node flow-node--success">
+                <div class="flow-node__count">{{ trace.recoveredCount }}</div>
+                <div class="flow-node__label">Recovered ✓</div>
+              </div>
+            </div>
+            <div class="flow-split__branch">
+              <div class="flow-split__arrow">↓</div>
+              <div class="flow-node flow-node--warn">
+                <div class="flow-node__count">{{ trace.remainingUnmatched }}</div>
+                <div class="flow-node__label">Still unmatched</div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -165,6 +177,24 @@ import { InfoTipComponent } from './info-tip.component';
     .flow-arrow {
       display: flex;
       align-items: center;
+    }
+
+    .flow-split {
+      display: flex;
+      gap: 1rem;
+      align-items: stretch;
+    }
+
+    .flow-split__branch {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.3rem;
+    }
+
+    .flow-split__arrow {
+      font-size: 1.2rem;
+      color: var(--ocean-300);
     }
 
     .sample-table {
