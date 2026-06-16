@@ -29,6 +29,7 @@ export class ResultsComponent implements OnInit, OnDestroy {
       this.results = results;
       this.selectedResult = results[0] ?? null;
       this.updateCharts();
+      this.syncHeights();
     });
   }
 
@@ -40,10 +41,22 @@ export class ResultsComponent implements OnInit, OnDestroy {
   selectResult(result: BenchmarkSummaryView): void {
     this.selectedResult = result;
     this.updateCharts();
+    this.syncHeights();
   }
 
   viewTrace(result: BenchmarkSummaryView): void {
     this.router.navigate(['/trace', result.resultId]);
+  }
+
+  private syncHeights(): void {
+    setTimeout(() => {
+      const detail = document.querySelector('.results-detail');
+      const list = document.querySelector('.results-list');
+      if (detail && list) {
+        const h = detail.getBoundingClientRect().height;
+        (list as HTMLElement).style.maxHeight = h + 'px';
+      }
+    });
   }
 
   private updateCharts(): void {
