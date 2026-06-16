@@ -6,12 +6,13 @@ import { AlgorithmTrace } from './trace.models';
 import { DiscoverySectionComponent } from './discovery-section.component';
 import { LearningSectionComponent } from './learning-section.component';
 import { ApplicationSectionComponent } from './application-section.component';
+import { FuzzySectionComponent } from './fuzzy-section.component';
 import { InputSectionComponent } from './input-section.component';
 
 @Component({
   selector: 'app-trace-page',
   standalone: true,
-  imports: [RouterLink, DecimalPipe, DiscoverySectionComponent, LearningSectionComponent, ApplicationSectionComponent, InputSectionComponent],
+  imports: [RouterLink, DecimalPipe, DiscoverySectionComponent, LearningSectionComponent, ApplicationSectionComponent, FuzzySectionComponent, InputSectionComponent],
   template: `
     <section class="container section">
       <a class="back-link" [routerLink]="backLink">← Back to {{ backLabel }}</a>
@@ -46,6 +47,12 @@ import { InputSectionComponent } from './input-section.component';
 
           <div class="card trace-section" id="step-apply">
             <app-application-section [trace]="winningApplication" />
+          </div>
+
+          <div class="trace-section-connector"></div>
+
+          <div class="card trace-section" id="step-fuzzy">
+            <app-fuzzy-section [trace]="winningFuzzy" />
           </div>
 
           <div class="trace-section-connector"></div>
@@ -248,6 +255,12 @@ export class TracePageComponent implements OnInit {
     if (!this.trace) return null;
     const dirTrace = this.trace.forwardWon ? this.trace.forwardTrace : this.trace.backwardTrace;
     return dirTrace.application;
+  }
+
+  get winningFuzzy() {
+    if (!this.trace) return null;
+    const dirTrace = this.trace.forwardWon ? this.trace.forwardTrace : this.trace.backwardTrace;
+    return dirTrace.fuzzy;
   }
 
   constructor(

@@ -9,6 +9,23 @@ import java.util.Map;
 import java.util.Set;
 
 public class ConstrainedFuzzyJoin {
+
+    /**
+     * Holds the result of {@link #recoverUnmatched} together with the optimal
+     * threshold that was used, so callers can surface both in trace output.
+     */
+    public static final class RecoveryOutcome {
+        private final List<FuzzyJoinResult> results;
+        private final double optimalThreshold;
+
+        public RecoveryOutcome(List<FuzzyJoinResult> results, double optimalThreshold) {
+            this.results = results;
+            this.optimalThreshold = optimalThreshold;
+        }
+
+        public List<FuzzyJoinResult> getResults() { return results; }
+        public double getOptimalThreshold() { return optimalThreshold; }
+    }
     private static final double EPSILON = 0.001; // Epsilon for comparison in binary search
     private static final int q = 3; // size of q_gram used for distance calculation
 
@@ -73,18 +90,18 @@ public class ConstrainedFuzzyJoin {
      * @param targetMatched           per target row: already joined by the equi-join
      * @return recovered row pairs (empty if no safe threshold exists)
      */
-    public List<FuzzyJoinResult> recoverUnmatched(List<String> transformedSourceColumn,
-                                                  List<String> targetKeyColumn,
-                                                  boolean[] sourceMatched,
-                                                  boolean[] targetMatched) {
+    public RecoveryOutcome recoverUnmatched(List<String> transformedSourceColumn,
+                                           List<String> targetKeyColumn,
+                                           boolean[] sourceMatched,
+                                           boolean[] targetMatched) {
         DistanceModel model = new DistanceModel(transformedSourceColumn, targetKeyColumn);
         if ((long) model.numSourceValues() * model.numTargetValues() > MAX_RECOVERY_PAIRS) {
-            return List.of();
+            return new RecoveryOutcome(List.of(), 0.0);
         }
 
         // Constraint 2 relaxed for recovery — see satisfiesConstraints.
         double threshold = model.findOptimalThreshold(false);
-        if (threshold <= 0.0) return List.of();
+        if (threshold <= 0.0) return new RecoveryOutcome(List.of(), 0.0);
 
         List<FuzzyJoinResult> recovered = new ArrayList<>();
         for (int i = 0; i < transformedSourceColumn.size(); i++) {
@@ -109,7 +126,7 @@ public class ConstrainedFuzzyJoin {
                 recovered.add(new FuzzyJoinResult(i, bestJ, bestDistance));
             }
         }
-        return recovered;
+        return new RecoveryOutcome(recovered, threshold);
     }
 
     /**
