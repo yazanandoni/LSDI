@@ -14,6 +14,7 @@ import com.autojoin.operator.SubstrOp;
 import com.autojoin.q_gram.AutoJoinDiscovery;
 import com.autojoin.q_gram.ColumnPairMatches;
 import com.autojoin.q_gram.MatchResult;
+import com.autojoin.sampling.Sample;
 import com.autojoin.synthesis.TransformationLearner;
 import com.autojoin.synthesis.TransformationLearner.LearnedTransformation;
 import com.autojoin.trace.AlgorithmTrace;
@@ -347,8 +348,17 @@ public class AutoJoin {
                 targetTable.getName(), targetTable.numRows());
 
         long t0 = System.nanoTime();
+
+        // get sample tables, with same parameter values as in the paper
+        double t = 4;
+        double delta = 0.8;
+        double r = 0.1;
+        Sample.SampleResult sample = Sample.sampleTables(sourceTable, targetTable, t, delta, r);
+        Table sourceSample = sample.sourceSample();
+        Table targetSample = sample.targetSample();
+
         List<ColumnPairMatches> matches =
-                discovery.findJoinableRowPairs(sourceTable, targetTable);
+                discovery.findJoinableRowPairs(sourceSample, targetSample);
         if (debug) System.err.printf("  [discovery] %d groups in %dms%n",
                 matches.size(), (System.nanoTime() - t0) / 1_000_000);
 
@@ -357,7 +367,7 @@ public class AutoJoin {
         if (matches.isEmpty()) return DirectionResult.empty();
 
         long t1 = System.nanoTime();
-        LearnedTransformation learned = learner.learn(matches, sourceTable, targetTable);
+        LearnedTransformation learned = learner.learn(matches, sourceSample, targetSample);
         if (debug) System.err.printf("  [learn] total %dms%n", (System.nanoTime() - t1) / 1_000_000);
 
         if (learned == null) return DirectionResult.empty();
