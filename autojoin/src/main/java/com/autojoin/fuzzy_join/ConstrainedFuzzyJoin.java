@@ -30,6 +30,22 @@ public class ConstrainedFuzzyJoin {
     private static final int q = 3; // size of q_gram used for distance calculation
 
     /**
+     * Tokenization scheme for the distance metric. The paper optimizes the fuzzy
+     * join over a space of tokenizations (§6.2 lists Exact/Lower/Split/Word/q-gram)
+     * jointly with the threshold — Eq. 10's argmax over (t, d, s). We sweep two:
+     *
+     *  - QGRAM: overlapping 3-grams. Good for intra-token noise (typos, missing
+     *    letters, formatting) — e.g. the paper's mpayne/mipayne email example.
+     *  - WORD:  whitespace-delimited tokens. Good for token-level differences:
+     *    reordering ("Agarwal Pankaj K." vs "Pankaj K. Agarwal" → identical word
+     *    set, distance 0) or extra/missing words ("Earl of Wilmington" vs "Spencer
+     *    Compton Earl of Wilmington"). With 3-grams these same pairs look far while
+     *    unrelated values sharing a numeric/word prefix look close, which collapses
+     *    the cardinality-constrained threshold to ~0 and disables recovery.
+     */
+    private enum Tokenization { QGRAM, WORD }
+
+    /**
      * Cap on the cached pairwise distance matrix (distinct-value pairs). The
      * binary search probes ~log2(1/EPSILON) thresholds and each probe needs the
      * same distances, so caching them below this size avoids recomputing the
@@ -94,7 +110,31 @@ public class ConstrainedFuzzyJoin {
                                            List<String> targetKeyColumn,
                                            boolean[] sourceMatched,
                                            boolean[] targetMatched) {
-        DistanceModel model = new DistanceModel(transformedSourceColumn, targetKeyColumn);
+        // Eq. 10 (t, d, s) search: try each tokenization, keep its
+        // cardinality-optimal threshold, and pick whichever recovers the most
+        // rows. QGRAM is tried first and ties keep it, so WORD only wins when it
+        // strictly recovers more — unchanged behavior on cases QGRAM already
+        // handled. The cardinality constraints (constraint 1, plus
+        // unmatched-only single-closest emission) guard precision regardless of
+        // which tokenization is chosen.
+        RecoveryOutcome best = new RecoveryOutcome(List.of(), 0.0);
+        for (Tokenization tok : Tokenization.values()) {
+            RecoveryOutcome outcome = recoverWith(tok, transformedSourceColumn,
+                    targetKeyColumn, sourceMatched, targetMatched);
+            if (outcome.getResults().size() > best.getResults().size()) {
+                best = outcome;
+            }
+        }
+        return best;
+    }
+
+    /** Recovery pass for a single tokenization scheme. */
+    private RecoveryOutcome recoverWith(Tokenization tok,
+                                        List<String> transformedSourceColumn,
+                                        List<String> targetKeyColumn,
+                                        boolean[] sourceMatched,
+                                        boolean[] targetMatched) {
+        DistanceModel model = new DistanceModel(transformedSourceColumn, targetKeyColumn, tok);
         if ((long) model.numSourceValues() * model.numTargetValues() > MAX_RECOVERY_PAIRS) {
             return new RecoveryOutcome(List.of(), 0.0);
         }
@@ -162,8 +202,12 @@ public class ConstrainedFuzzyJoin {
         private final double[] matrix;
 
         DistanceModel(List<String> sourceColumn, List<String> targetColumn) {
-            sourceValueIdx = indexDistinct(sourceColumn, sourceValues, sourceTokens);
-            targetValueIdx = indexDistinct(targetColumn, targetValues, targetTokens);
+            this(sourceColumn, targetColumn, Tokenization.QGRAM);
+        }
+
+        DistanceModel(List<String> sourceColumn, List<String> targetColumn, Tokenization tok) {
+            sourceValueIdx = indexDistinct(sourceColumn, sourceValues, sourceTokens, tok);
+            targetValueIdx = indexDistinct(targetColumn, targetValues, targetTokens, tok);
 
             targetValueRowCount = new int[targetValues.size()];
             for (int ki : targetValueIdx) {
@@ -262,7 +306,8 @@ public class ConstrainedFuzzyJoin {
         /** Dedupe a column to distinct values, tokenizing each value once. */
         private static int[] indexDistinct(List<String> column,
                                            List<String> values,
-                                           List<Set<String>> tokens) {
+                                           List<Set<String>> tokens,
+                                           Tokenization tok) {
             int[] idx = new int[column.size()];
             Map<String, Integer> seen = new HashMap<>();
             for (int r = 0; r < column.size(); r++) {
@@ -276,7 +321,7 @@ public class ConstrainedFuzzyJoin {
                     e = values.size();
                     seen.put(v, e);
                     values.add(v);
-                    tokens.add(tokenizeToQGrams(v));
+                    tokens.add(tokenize(v, tok));
                 }
                 idx[r] = e;
             }
@@ -306,6 +351,25 @@ public class ConstrainedFuzzyJoin {
 
         // Jaccard Distance = 1.0 - (Intersection / Union)
         return 1.0 - (double) intersection / union;
+    }
+
+    /** Tokenize a value under the given scheme. */
+    private static Set<String> tokenize(String text, Tokenization tok) {
+        return tok == Tokenization.WORD ? tokenizeToWords(text) : tokenizeToQGrams(text);
+    }
+
+    /**
+     * Splits a string into whitespace-delimited word tokens. Punctuation is kept
+     * attached (e.g. "K." stays one token) so it matches identically on both
+     * sides; an empty/blank string yields an empty set, which {@link
+     * #jaccardDistance} already maps to distance 0 (both blank) or 1 (one blank).
+     */
+    private static Set<String> tokenizeToWords(String text) {
+        Set<String> words = new HashSet<>();
+        for (String w : text.trim().split("\\s+")) {
+            if (!w.isEmpty()) words.add(w);
+        }
+        return words;
     }
 
     /**
