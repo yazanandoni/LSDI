@@ -25,6 +25,7 @@
 
 .layout {
   grid-template-columns: minmax(240px, 320px) 1fr;
+  align-items: start;
 }
 
 .results-list {
@@ -32,6 +33,7 @@
   display: grid;
   gap: 1rem;
   align-content: start;
+  overflow-y: auto;
 }
 
 .results-list__item {

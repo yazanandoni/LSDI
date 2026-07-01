@@ -1,6 +1,7 @@
 package com.autojoin;
 
 import com.autojoin.fuzzy_join.ConstrainedFuzzyJoin;
+import com.autojoin.fuzzy_join.ConstrainedFuzzyJoin.RecoveryOutcome;
 import com.autojoin.fuzzy_join.FuzzyJoinResult;
 import com.autojoin.model.Column;
 import com.autojoin.model.Row;
@@ -13,8 +14,11 @@ import com.autojoin.operator.SubstrOp;
 import com.autojoin.q_gram.AutoJoinDiscovery;
 import com.autojoin.q_gram.ColumnPairMatches;
 import com.autojoin.q_gram.MatchResult;
+import com.autojoin.sampling.Sample;
+import com.autojoin.split.CompositeColumnSplitter;
 import com.autojoin.synthesis.TransformationLearner;
 import com.autojoin.synthesis.TransformationLearner.LearnedTransformation;
+import com.autojoin.synthesis.TransformationProgram;
 import com.autojoin.trace.AlgorithmTrace;
 import com.autojoin.trace.ApplicationTrace;
 import com.autojoin.trace.ColumnPairGroup;
@@ -22,6 +26,8 @@ import com.autojoin.trace.DemoMatch;
 import com.autojoin.trace.DirectionTrace;
 import com.autojoin.trace.DiscoveryTrace;
 import com.autojoin.trace.ExamplePairData;
+import com.autojoin.trace.FuzzyRecoveryMatch;
+import com.autojoin.trace.FuzzyTrace;
 import com.autojoin.trace.InputTablesTrace;
 import com.autojoin.trace.InputTablesTrace.TableInfo;
 import com.autojoin.trace.LearningTrace;
@@ -44,6 +50,15 @@ public class AutoJoin {
     private final AutoJoinDiscovery discovery = new AutoJoinDiscovery();
     private final TransformationLearner learner = new TransformationLearner();
 
+    /**
+     * Largest table (by rows) for which the §3.3 composite-key split retry is
+     * attempted. The retry doubles discovery+learning cost, so on big tables it
+     * breaks the paper's interactive-speed goal; the composite-key scenarios
+     * §3.3 targets (Enterprise-style keys) are not million-row. Above this, a
+     * direction that found no transform keeps its fuzzy-only fallback instead.
+     */
+    private static final int MAX_SPLIT_RETRY_ROWS = 1000;
+
     public JoinResult join(Table ts, Table tt) {
         // The two directions are fully independent (discovery is stateless and
         // the learner creates per-group synthesizers), so run them
@@ -55,29 +70,65 @@ public class AutoJoin {
         DirectionResult backward = tryDirection(tt, ts);
         DirectionResult forward = forwardFuture.join();
 
-        boolean forwardWon;
-        JoinResult bestJoin;
+        List<Candidate> candidates = new ArrayList<>(4);
+        candidates.add(new Candidate(forward, true));
+        candidates.add(new Candidate(backward, false));
 
-        if (forward.join.isEmpty() && backward.join.isEmpty()) return JoinResult.empty();
-        if (forward.join.isEmpty()) {
-            forwardWon = false;
-            bestJoin = orientSourceTarget(backward.join);
-        } else if (backward.join.isEmpty()) {
-            forwardWon = true;
-            bestJoin = forward.join;
-        } else {
-            if (forward.score != backward.score) {
-                forwardWon = forward.score > backward.score;
-                bestJoin = forwardWon ? forward.join : orientSourceTarget(backward.join);
-            } else {
-                forwardWon = forward.join.size() >= backward.join.size();
-                bestJoin = forwardWon ? forward.join : orientSourceTarget(backward.join);
+        // §3.3 Join with Composite Key Columns. When NEITHER direction learned a
+        // real transformation (score ≥ 1; the fuzzy-only fallback scores ≤ 0),
+        // a key column may be composite — one side packs fields (life span,
+        // party, …) the other simply does not have, so no transformation can
+        // reproduce it. Split the composite key columns into component
+        // sub-columns and retry the join on the enriched tables. Only
+        // real-transform results (score ≥ 1) from the retry are admitted, so the
+        // split pass can lift a previously-unjoinable case but never displaces a
+        // good fuzzy-only fallback with a worse split fuzzy-only.
+        if (forward.score < 1 && backward.score < 1
+                && Math.max(ts.numRows(), tt.numRows()) <= MAX_SPLIT_RETRY_ROWS) {
+            CompositeColumnSplitter splitter = new CompositeColumnSplitter();
+            Table tsSplit = splitter.splitKeyColumns(ts);
+            Table ttSplit = splitter.splitKeyColumns(tt);
+            if (tsSplit != ts || ttSplit != tt) {
+                java.util.concurrent.CompletableFuture<DirectionResult> fSplitFuture =
+                        java.util.concurrent.CompletableFuture.supplyAsync(() -> tryDirection(tsSplit, ttSplit));
+                DirectionResult bSplit = tryDirection(ttSplit, tsSplit);
+                DirectionResult fSplit = fSplitFuture.join();
+                if (fSplit.score >= 1) candidates.add(new Candidate(fSplit, true));
+                if (bSplit.score >= 1) candidates.add(new Candidate(bSplit, false));
             }
         }
+
+        Candidate winner = pickBest(candidates);
+        if (winner == null) return JoinResult.empty();
+
+        boolean forwardWon = winner.forward();
+        JoinResult bestJoin = forwardWon ? winner.dr().join : orientSourceTarget(winner.dr().join);
 
         InputTablesTrace inputTables = buildInputTablesTrace(ts, tt);
         AlgorithmTrace trace = new AlgorithmTrace(forwardWon, forward.trace, backward.trace, inputTables);
         return JoinResult.of(bestJoin.getJoinedPairs(), bestJoin.getTransformationDescription(), trace);
+    }
+
+    /** A directional result and whether it is already source→target oriented. */
+    private record Candidate(DirectionResult dr, boolean forward) {}
+
+    /**
+     * Pick the best non-empty candidate: highest transform score, then richer
+     * key (more source columns), then more joined rows. Forward candidates are
+     * listed before backward, so a full tie keeps forward — preserving the
+     * original direction preference. Returns null if every candidate is empty.
+     */
+    private static Candidate pickBest(List<Candidate> candidates) {
+        Candidate best = null;
+        for (Candidate c : candidates) {
+            if (c.dr().join.isEmpty()) continue;
+            if (best == null) { best = c; continue; }
+            int cmp = Integer.compare(c.dr().score, best.dr().score);
+            if (cmp == 0) cmp = Integer.compare(c.dr().keyColumns, best.dr().keyColumns);
+            if (cmp == 0) cmp = Integer.compare(c.dr().join.size(), best.dr().join.size());
+            if (cmp > 0) best = c;
+        }
+        return best;
     }
 
     private static JoinResult orientSourceTarget(JoinResult backward) {
@@ -91,17 +142,34 @@ public class AutoJoin {
     private static final class DirectionResult {
         final JoinResult join;
         final int score;
+        /** Distinct source columns the chosen transform reads — the tie-breaker
+         *  when two directions score equally (richer key preferred). */
+        final int keyColumns;
         final DirectionTrace trace;
 
-        DirectionResult(JoinResult join, int score, DirectionTrace trace) {
+        DirectionResult(JoinResult join, int score, int keyColumns, DirectionTrace trace) {
             this.join = join;
             this.score = score;
+            this.keyColumns = keyColumns;
             this.trace = trace;
         }
 
         static DirectionResult empty() {
-            return new DirectionResult(JoinResult.empty(), 0, DirectionTrace.empty());
+            return new DirectionResult(JoinResult.empty(), 0, 0, DirectionTrace.empty());
         }
+    }
+
+    /** Number of distinct source columns a transformation reads (Constant ops
+     *  read none). Used as a tie-break: a key built from more of the row is more
+     *  discriminative and less prone to coincidental collisions. */
+    private static int distinctSourceColumns(TransformationProgram program) {
+        Set<Integer> cols = new HashSet<>();
+        for (LogicalOperator op : program.getOperators()) {
+            if (op instanceof SubstrOp s) cols.add(s.getK());
+            else if (op instanceof SplitSubstrOp s) cols.add(s.getK());
+            else if (op instanceof SplitSplitSubstrOp s) cols.add(s.getK1());
+        }
+        return cols.size();
     }
 
     private static InputTablesTrace buildInputTablesTrace(Table source, Table target) {
@@ -344,8 +412,17 @@ public class AutoJoin {
                 targetTable.getName(), targetTable.numRows());
 
         long t0 = System.nanoTime();
+
+        // get sample tables, with same parameter values as in the paper
+        double t = 4;
+        double delta = 0.8;
+        double r = 0.1;
+        Sample.SampleResult sample = Sample.sampleTables(sourceTable, targetTable, t, delta, r);
+        Table sourceSample = sample.sourceSample();
+        Table targetSample = sample.targetSample();
+
         List<ColumnPairMatches> matches =
-                discovery.findJoinableRowPairs(sourceTable, targetTable);
+                discovery.findJoinableRowPairs(sourceSample, targetSample);
         if (debug) System.err.printf("  [discovery] %d groups in %dms%n",
                 matches.size(), (System.nanoTime() - t0) / 1_000_000);
 
@@ -354,10 +431,19 @@ public class AutoJoin {
         if (matches.isEmpty()) return DirectionResult.empty();
 
         long t1 = System.nanoTime();
-        LearnedTransformation learned = learner.learn(matches, sourceTable, targetTable);
+        LearnedTransformation learned = learner.learn(matches, sourceSample, targetSample);
         if (debug) System.err.printf("  [learn] total %dms%n", (System.nanoTime() - t1) / 1_000_000);
 
-        if (learned == null) return DirectionResult.empty();
+        if (learned == null) {
+            // No transformation generalizes in this direction. Don't give up —
+            // fall back to a constrained fuzzy join on the raw best-evidence
+            // column pair (paper §5 as the recovery net for cases like
+            // "duke cs profs", where the join is a token reorder).
+            DirectionResult fuzzyOnly = fuzzyOnlyDirection(matches, sourceTable, targetTable);
+            if (debug) System.err.printf("  [fuzzy-only] %d pairs (no transform learned)%n",
+                    fuzzyOnly.join.size());
+            return fuzzyOnly;
+        }
 
         LearningTrace learningTrace = buildLearningTrace(matches, learned, sourceTable, targetTable);
 
@@ -366,23 +452,44 @@ public class AutoJoin {
 
         if (joinedPairs.isEmpty()) return DirectionResult.empty();
 
+        // Application trace: built BEFORE fuzzy recovery so it shows only
+        // equi-joined pairs (the fuzzy step picks up the rest afterwards).
+        ApplicationTrace applicationTrace = buildApplicationTrace(
+                joinedPairs, learned, sourceTable);
+
         // Phase 4 (paper §5): constrained fuzzy join recovery of the rows the
         // strict equi-join left unmatched.
-        List<Row[]> recoveredPairs = fuzzyRecover(learned, sourceTable, targetTable);
+        FuzzyRecoveryResult fuzzyResult = fuzzyRecover(learned, sourceTable, targetTable);
         List<Row[]> allPairs = joinedPairs;
-        if (!recoveredPairs.isEmpty()) {
+        FuzzyTrace fuzzyTrace = null;
+        if (!fuzzyResult.pairs().isEmpty()) {
             allPairs = new ArrayList<>(joinedPairs);
-            allPairs.addAll(recoveredPairs);
+            allPairs.addAll(fuzzyResult.pairs());
+
+            List<FuzzyRecoveryMatch> samples = new ArrayList<>();
+            int sampleLimit = Math.min(5, fuzzyResult.rawResults().size());
+            for (int i = 0; i < sampleLimit; i++) {
+                FuzzyJoinResult fr = fuzzyResult.rawResults().get(i);
+                String srcVal = safeGet(sourceTable.getRow(fr.sourceRowIndex), learned.sourceColumnName);
+                String tgtVal = safeGet(targetTable.getRow(fr.targetRowIndex), learned.targetColumnName);
+                samples.add(new FuzzyRecoveryMatch(srcVal, tgtVal, fr.distance));
+            }
+            int remaining = fuzzyResult.unmatchedBeforeFuzzy() - fuzzyResult.pairs().size();
+            fuzzyTrace = new FuzzyTrace(
+                    fuzzyResult.pairs().size(),
+                    fuzzyResult.threshold(),
+                    fuzzyResult.unmatchedBeforeFuzzy(),
+                    remaining,
+                    samples);
         }
-        if (debug) System.err.printf("  [fuzzy] recovered %d of unmatched rows%n", recoveredPairs.size());
+        if (debug) System.err.printf("  [fuzzy] recovered %d of unmatched rows%n", fuzzyResult.pairs().size());
 
-        ApplicationTrace applicationTrace = buildApplicationTrace(allPairs, learned, sourceTable);
-
-        DirectionTrace directionTrace = new DirectionTrace(discoveryTrace, learningTrace, applicationTrace);
+        DirectionTrace directionTrace = new DirectionTrace(discoveryTrace, learningTrace, applicationTrace, fuzzyTrace);
 
         return new DirectionResult(
                 JoinResult.of(allPairs, learned.program.describe()),
                 learned.score,
+                distinctSourceColumns(learned.program),
                 directionTrace);
     }
 
@@ -396,10 +503,10 @@ public class AutoJoin {
      * constrain it, so no equi-joined row can gain a second (wrong) match and
      * ambiguous matches the equi-join deliberately dropped are not re-admitted.
      */
-    private static List<Row[]> fuzzyRecover(LearnedTransformation learned,
-                                            Table sourceTable, Table targetTable) {
+    private static FuzzyRecoveryResult fuzzyRecover(LearnedTransformation learned,
+                                                    Table sourceTable, Table targetTable) {
         Optional<Column> tgtColOpt = targetTable.getColumn(learned.targetColumnName);
-        if (tgtColOpt.isEmpty()) return List.of();
+        if (tgtColOpt.isEmpty()) return new FuzzyRecoveryResult(List.of(), List.of(), 0.0, 0);
         List<String> targetVals = tgtColOpt.get().getValues();
 
         // Derive every source key once.
@@ -420,12 +527,12 @@ public class AutoJoin {
         // Mirror applyJoin's emission criterion (unique target key; source-side
         // N:1 allowed) to flag the rows the equi-join already covered.
         boolean[] srcMatched = new boolean[n];
-        boolean anyUnmatchedSrc = false;
+        int unmatchedCount = 0;
         for (int i = 0; i < n; i++) {
             String d = derived.get(i);
             srcMatched[i] = d != null
                     && Integer.valueOf(1).equals(targetValueCounts.get(d));
-            if (!srcMatched[i]) anyUnmatchedSrc = true;
+            if (!srcMatched[i]) unmatchedCount++;
         }
         boolean[] tgtMatched = new boolean[targetVals.size()];
         boolean anyUnmatchedTgt = false;
@@ -436,17 +543,88 @@ public class AutoJoin {
                     && derivedCounts.getOrDefault(v, 0) >= 1;
             if (!tgtMatched[j]) anyUnmatchedTgt = true;
         }
-        if (!anyUnmatchedSrc || !anyUnmatchedTgt) return List.of();
+        if (unmatchedCount == 0 || !anyUnmatchedTgt) {
+            return new FuzzyRecoveryResult(List.of(), List.of(), 0.0, unmatchedCount);
+        }
 
-        List<FuzzyJoinResult> recovered = new ConstrainedFuzzyJoin()
+        RecoveryOutcome outcome = new ConstrainedFuzzyJoin()
                 .recoverUnmatched(derived, targetVals, srcMatched, tgtMatched);
 
-        List<Row[]> pairs = new ArrayList<>(recovered.size());
-        for (FuzzyJoinResult r : recovered) {
+        List<Row[]> pairs = new ArrayList<>(outcome.getResults().size());
+        for (FuzzyJoinResult r : outcome.getResults()) {
             pairs.add(new Row[]{
                     sourceTable.getRow(r.sourceRowIndex),
                     targetTable.getRow(r.targetRowIndex)});
         }
-        return pairs;
+        return new FuzzyRecoveryResult(pairs, outcome.getResults(), outcome.getOptimalThreshold(), unmatchedCount);
+    }
+
+    private static record FuzzyRecoveryResult(List<Row[]> pairs, List<FuzzyJoinResult> rawResults,
+                                               double threshold, int unmatchedBeforeFuzzy) {}
+
+    /**
+     * Last-resort join for a direction in which no transformation could be
+     * learned (e.g. "duke cs profs": "Agarwal Pankaj K." → "Pankaj K. Agarwal"
+     * is a token REORDER that no single string transform generalizes across the
+     * varying token counts). Instead of returning empty, run the constrained
+     * fuzzy join (§5) directly on the strongest q-gram-evidenced column pair with
+     * the identity transform (raw source values). The word-tokenization sweep in
+     * {@link ConstrainedFuzzyJoin} makes a pure reorder a distance-0 match, and
+     * the cardinality constraint plus single-closest emission bound precision.
+     * The result is scored 0, so a real transformation in the other direction
+     * always outranks it.
+     */
+    private static DirectionResult fuzzyOnlyDirection(List<ColumnPairMatches> matches,
+                                                      Table sourceTable, Table targetTable) {
+        // Strongest column pair, by the same ordering the learner uses:
+        // average q-gram goodness, then match count.
+        ColumnPairMatches best = null;
+        double bestAvg = -1;
+        int bestCount = -1;
+        for (ColumnPairMatches g : matches) {
+            if (g.getMatches().isEmpty()) continue;
+            double avg = 0;
+            for (MatchResult mr : g.getMatches()) avg += mr.getScore();
+            avg /= g.getMatches().size();
+            int count = g.getMatches().size();
+            if (avg > bestAvg || (avg == bestAvg && count > bestCount)) {
+                bestAvg = avg;
+                bestCount = count;
+                best = g;
+            }
+        }
+        if (best == null) return DirectionResult.empty();
+
+        Optional<Column> srcColOpt = sourceTable.getColumn(best.getSourceColumnName());
+        Optional<Column> tgtColOpt = targetTable.getColumn(best.getTargetColumnName());
+        if (srcColOpt.isEmpty() || tgtColOpt.isEmpty()) return DirectionResult.empty();
+
+        List<String> srcVals = srcColOpt.get().getValues();   // identity "transform"
+        List<String> tgtVals = tgtColOpt.get().getValues();
+        boolean[] srcMatched = new boolean[srcVals.size()];   // nothing equi-joined yet
+        boolean[] tgtMatched = new boolean[tgtVals.size()];
+
+        RecoveryOutcome outcome = new ConstrainedFuzzyJoin()
+                .recoverUnmatched(srcVals, tgtVals, srcMatched, tgtMatched);
+        if (outcome.getResults().isEmpty()) return DirectionResult.empty();
+
+        List<Row[]> pairs = new ArrayList<>(outcome.getResults().size());
+        for (FuzzyJoinResult r : outcome.getResults()) {
+            pairs.add(new Row[]{
+                    sourceTable.getRow(r.sourceRowIndex),
+                    targetTable.getRow(r.targetRowIndex)});
+        }
+        String desc = "Fuzzy join (no transform): " + best.getSourceColumnName()
+                + " ~ " + best.getTargetColumnName();
+        // Score negatively so any real transformation (score ≥ 1) in the other
+        // direction outranks this fallback. Among two fuzzy-only directions,
+        // prefer the one driven from the SMALLER source column: the fuzzy join
+        // emits one match per source row, so driving from the small,
+        // fully-participating side (e.g. 60 Duke profs → a 2195-row directory)
+        // yields ~one correct pair each, whereas driving from the large side
+        // makes every stray target row grab a nearest source and floods the
+        // result with false positives. Fewer source rows ⇒ higher (less
+        // negative) score ⇒ wins.
+        return new DirectionResult(JoinResult.of(pairs, desc), -srcVals.size(), 1, DirectionTrace.empty());
     }
 }

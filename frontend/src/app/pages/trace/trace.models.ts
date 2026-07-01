@@ -23,6 +23,7 @@ export interface DirectionTrace {
   discovery: DiscoveryTrace;
   learning: LearningTrace;
   application: ApplicationTrace;
+  fuzzy: FuzzyTrace | null;
 }
 
 export interface DiscoveryTrace {
@@ -94,4 +95,18 @@ export interface SampleMatch {
   transformedKey: string;
   matchedTargetValue: string;
   status: string;
+}
+
+export interface FuzzyTrace {
+  recoveredCount: number;
+  optimalThreshold: number;
+  unmatchedBeforeFuzzy: number;
+  remainingUnmatched: number;
+  sampleRecovered: FuzzyRecoveryMatch[];
+}
+
+export interface FuzzyRecoveryMatch {
+  sourceValue: string;
+  targetValue: string;
+  jaccardDistance: number;
 }

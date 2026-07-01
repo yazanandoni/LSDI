@@ -46,6 +46,7 @@ export function buildMatchBreakdownOption(tp: number, mismatches: number) {
         name: 'Matches',
         type: 'pie',
         radius: ['40%', '70%'],
+        label: { show: false },
         data: [
           { value: tp, name: 'True positives' },
           { value: mismatches, name: 'Mismatches' }
