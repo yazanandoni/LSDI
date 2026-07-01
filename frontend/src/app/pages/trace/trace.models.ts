@@ -3,6 +3,10 @@ export interface AlgorithmTrace {
   forwardTrace: DirectionTrace;
   backwardTrace: DirectionTrace;
   inputTables: InputTablesTrace;
+  discoveryMs: number;
+  learningMs: number;
+  joinMs: number;
+  fuzzyMs: number;
 }
 
 export interface InputTablesTrace {

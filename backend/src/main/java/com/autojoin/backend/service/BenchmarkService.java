@@ -12,6 +12,7 @@ import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.io.BufferedReader;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
@@ -70,11 +71,11 @@ public class BenchmarkService {
                     String pairId = fixturePath.getFileName().toString();
                     if (pairId.startsWith("_") || !seen.add(pairId)) continue;
                     BenchmarkFixture fixture = loader.loadFixture(pairId);
-                    Table sourceTable = loadTable(fixture.source.file, fixture.source.key_columns);
-                    Table targetTable = loadTable(fixture.target.file, fixture.target.key_columns);
+                    int[] srcInfo = countCsvRowsAndColumns(resolvePath(fixture.source.file));
+                    int[] tgtInfo = countCsvRowsAndColumns(resolvePath(fixture.target.file));
                     benchmarks.add(new BenchmarkDescriptor(pairId,
-                            sourceTable.numRows(), sourceTable.numColumns(),
-                            targetTable.numRows(), targetTable.numColumns(),
+                            srcInfo[0], srcInfo[1],
+                            tgtInfo[0], tgtInfo[1],
                             fixture.source.key_columns, fixture.target.key_columns));
                 }
             }
@@ -191,6 +192,25 @@ public class BenchmarkService {
 
     private Path resolvePath(String relativePath) {
         return dataRoot.resolve(relativePath);
+    }
+
+    /**
+     * Lightweight CSV row/column counter — reads the header line for column
+     * count and counts data rows, without materialising the full table.
+     * Returns int[]{rows, columns}.
+     */
+    private int[] countCsvRowsAndColumns(Path csvPath) throws IOException {
+        try (BufferedReader br = new BufferedReader(new FileReader(csvPath.toFile()))) {
+            String header = br.readLine();
+            if (header == null || header.isBlank()) return new int[]{0, 0};
+            int cols = parseCsvLine(header).length;
+            int rows = 0;
+            String line;
+            while ((line = br.readLine()) != null) {
+                if (!line.isBlank()) rows++;
+            }
+            return new int[]{rows, cols};
+        }
     }
 
     /**
