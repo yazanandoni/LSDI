@@ -16,10 +16,11 @@ import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.io.BufferedReader;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -235,16 +236,27 @@ public class BenchmarkService {
      * Returns int[]{rows, columns}.
      */
     private int[] countCsvRowsAndColumns(Path csvPath) throws IOException {
-        try (BufferedReader br = new BufferedReader(new FileReader(csvPath.toFile()))) {
-            String header = br.readLine();
-            if (header == null || header.isBlank()) return new int[]{0, 0};
-            int cols = parseCsvLine(header).length;
-            int rows = 0;
-            String line;
-            while ((line = br.readLine()) != null) {
-                if (!line.isBlank()) rows++;
+        try (RandomAccessFile raf = new RandomAccessFile(csvPath.toFile(), "r")) {
+            // Read first 2KB for the header line
+            byte[] head = new byte[2048];
+            int headLen = raf.read(head);
+            if (headLen <= 0) return new int[]{0, 0};
+            String headerStr = new String(head, 0, headLen, StandardCharsets.UTF_8);
+            int headerEnd = headerStr.indexOf('\n');
+            if (headerEnd < 0) return new int[]{0, 0};
+            int cols = headerStr.substring(0, headerEnd).split(",", -1).length;
+
+            // Count newlines by scanning raw bytes (no String allocation)
+            raf.seek(0);
+            byte[] buf = new byte[8192];
+            int read;
+            long newlines = 0;
+            while ((read = raf.read(buf)) != -1) {
+                for (int i = 0; i < read; i++) {
+                    if (buf[i] == '\n') newlines++;
+                }
             }
-            return new int[]{rows, cols};
+            return new int[]{(int) (newlines - 1), cols};
         }
     }
 

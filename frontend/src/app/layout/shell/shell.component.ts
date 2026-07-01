@@ -12,6 +12,7 @@ export class ShellComponent {
   navLinks = [
     { label: 'Dashboard', path: '' },
     { label: 'Benchmarks', path: 'benchmarks' },
+    { label: 'DBLP', path: 'dblp' },
     { label: 'Scalability', path: 'scalability' },
     { label: 'Results', path: 'results' },
     { label: 'Upload', path: 'upload' }

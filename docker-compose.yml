@@ -9,7 +9,7 @@ services:
       - ./autojoin/data:/app/autojoin/data
     environment:
       - APP_DATA_ROOT=autojoin
-      - JAVA_OPTS=-Xms256m -Xmx512m
+      - JAVA_TOOL_OPTIONS=-Xmx8g
 
   frontend:
     build:

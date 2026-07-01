@@ -2,10 +2,10 @@
   <a class="back-link" routerLink="/">← Back to Dashboard</a>
   <div class="section__header">
     <div>
-      <p class="eyebrow">Benchmark catalog</p>
-      <h2>Web Benchmarks</h2>
+      <p class="eyebrow">DBLP scalability</p>
+      <h2>DBLP Benchmark Pairs</h2>
     </div>
-    <p class="helper">Select one or more pairs, choose a join method, and launch the pipeline.</p>
+    <p class="helper">Select DBLP sizes, choose a join method, and run. Results appear on the Results page with trace support.</p>
   </div>
 
   <div class="toolbar" *ngIf="benchmarks.length > 0">
@@ -66,7 +66,7 @@
 
   <ng-template #emptyState>
     <div class="card empty">
-      <p>No benchmark fixtures found.</p>
+      <p>No DBLP fixtures found.</p>
     </div>
   </ng-template>
 

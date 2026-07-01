@@ -6,13 +6,13 @@ import { BenchmarkService } from '../../services/benchmark.service';
 import { BenchmarkDescriptor } from '../../app.models';
 
 @Component({
-  selector: 'app-benchmarks',
+  selector: 'app-dblp',
   standalone: true,
   imports: [RouterLink, NgFor, NgIf, FormsModule],
-  templateUrl: './benchmarks.component.html',
-  styleUrl: './benchmarks.component.scss'
+  templateUrl: './dblp.component.html',
+  styleUrl: './dblp.component.scss'
 })
-export class BenchmarksComponent implements OnInit {
+export class DblpComponent implements OnInit {
   benchmarks: BenchmarkDescriptor[] = [];
   methods = ['AJ', 'SM', 'FJ-C', 'FJ-O', 'All'];
   allMethods = ['AJ', 'SM', 'FJ-C', 'FJ-O'];
@@ -28,7 +28,7 @@ export class BenchmarksComponent implements OnInit {
 
   ngOnInit(): void {
     this.benchmarkService.listBenchmarks().subscribe((benchmarks) => {
-      this.benchmarks = benchmarks.filter(b => !b.pairId.startsWith('dblp-'));
+      this.benchmarks = benchmarks.filter(b => b.pairId.startsWith('dblp-'));
     });
   }
 
