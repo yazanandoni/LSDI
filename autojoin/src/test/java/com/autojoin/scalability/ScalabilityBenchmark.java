@@ -2,6 +2,11 @@ package com.autojoin.scalability;
 
 import com.autojoin.AutoJoin;
 import com.autojoin.JoinResult;
+import com.autojoin.baselines.FuzzyJoinColumn;
+import com.autojoin.baselines.FuzzyJoinOracle;
+import com.autojoin.baselines.JoinMethod;
+import com.autojoin.baselines.SubstringMatching;
+import com.autojoin.model.Row;
 import com.autojoin.model.Table;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
@@ -47,33 +52,84 @@ class ScalabilityBenchmark {
 
         int[] sizes = parseSizes(System.getProperty("dblp.n", "100,1000,10000,100000"));
         int repeats = Integer.getInteger("dblp.repeats", 3);
+        List<String> methods = Arrays.stream(
+                System.getProperty("methods", "AJ,SM,FJ-C,FJ-O").split(","))
+                .map(String::trim).filter(s -> !s.isEmpty()).toList();
 
-        System.out.printf("%n%-10s %-10s %-11s %s%n", "N", "joined", "median_ms", "runs_ms");
-        System.out.println("-".repeat(60));
+        // The fuzzy baselines (FJ-C, FJ-O) are inherently all-pairs O(Ns·Nt) and
+        // SM's alignment search is O(candidates·Ns) — this is exactly why the
+        // paper (Fig. 8) shows all three timing out early. We skip a run once it
+        // exceeds its cap rather than launch a multi-minute computation that
+        // would lag the machine; the skip IS the "does not scale" result. Only
+        // AJ (near-linear) always runs.
+        long fuzzyMaxPairs = Long.getLong("fuzzy.maxpairs", 4_000_000L);
+        long smMaxRows = Long.getLong("sm.maxrows", 5_000L);
+
+        System.out.printf("%n%-8s %-6s %-10s %-11s %s%n", "N", "method", "joined", "median_ms", "runs_ms");
+        System.out.println("-".repeat(64));
         for (int n : sizes) {
             Path dir = base.resolve(String.valueOf(n));
             if (!Files.isDirectory(dir)) {
-                System.out.printf("%-10d (missing %s — skipped)%n", n, dir);
+                System.out.printf("%-8d (missing %s — skipped)%n", n, dir);
                 continue;
             }
             // Source keys = the three fields, so BOTH join directions are exercised
             // (as the real tool does); target key = the concatenated column.
             Table src = load(dir.resolve("source.csv"), "src", List.of("authors", "title", "year"));
             Table tgt = load(dir.resolve("target.csv"), "tgt", List.of("record"));
+            List<String> srcKeys = List.of("authors", "title", "year");
+            List<String> tgtKeys = List.of("record");
+            long pairWork = (long) src.numRows() * tgt.numRows();
 
-            long[] times = new long[repeats];
-            int joined = 0;
-            for (int r = 0; r < repeats; r++) {
-                long t0 = System.nanoTime();
-                JoinResult res = new AutoJoin().join(src, tgt);
-                times[r] = (System.nanoTime() - t0) / 1_000_000;
-                joined = res.size();
+            for (String method : methods) {
+                boolean fuzzy = method.equals("FJ-C") || method.equals("FJ-O");
+                if (fuzzy && pairWork > fuzzyMaxPairs) {
+                    System.out.printf("%-8d %-6s %-10s %-11s (Ns*Nt=%d > cap %d)%n",
+                            n, method, "-", "SKIP", pairWork, fuzzyMaxPairs);
+                    continue;
+                }
+                if (method.equals("SM") && src.numRows() > smMaxRows) {
+                    System.out.printf("%-8d %-6s %-10s %-11s (Ns=%d > cap %d)%n",
+                            n, method, "-", "SKIP", src.numRows(), smMaxRows);
+                    continue;
+                }
+                long[] times = new long[repeats];
+                int joined = 0;
+                for (int r = 0; r < repeats; r++) {
+                    long t0 = System.nanoTime();
+                    joined = runMethod(method, src, tgt, srcKeys, tgtKeys);
+                    times[r] = (System.nanoTime() - t0) / 1_000_000;
+                }
+                Arrays.sort(times);
+                System.out.printf("%-8d %-6s %-10d %-11d %s%n",
+                        n, method, joined, times[times.length / 2], Arrays.toString(times));
             }
-            Arrays.sort(times);
-            System.out.printf("%-10d %-10d %-11d %s%n",
-                    n, joined, times[times.length / 2], Arrays.toString(times));
         }
     }
+
+    /** Run one method end-to-end and return the number of joined pairs. */
+    private static int runMethod(String method, Table src, Table tgt,
+                                 List<String> srcKeys, List<String> tgtKeys) {
+        switch (method) {
+            case "AJ":
+                return new AutoJoin().join(src, tgt).size();
+            case "SM":
+                return sizeOf(new SubstringMatching().join(input(src, tgt, srcKeys, tgtKeys)));
+            case "FJ-C":
+                return sizeOf(new FuzzyJoinColumn().join(input(src, tgt, srcKeys, tgtKeys)));
+            case "FJ-O":
+                return sizeOf(new FuzzyJoinOracle().join(input(src, tgt, srcKeys, tgtKeys)));
+            default:
+                throw new IllegalArgumentException("unknown method: " + method);
+        }
+    }
+
+    private static JoinMethod.JoinInput input(Table src, Table tgt,
+                                              List<String> srcKeys, List<String> tgtKeys) {
+        return new JoinMethod.JoinInput(src, tgt, srcKeys, tgtKeys);
+    }
+
+    private static int sizeOf(List<Row[]> pairs) { return pairs.size(); }
 
     private static Table load(Path csv, String name, List<String> keys) throws IOException {
         try (Reader r = Files.newBufferedReader(csv, StandardCharsets.UTF_8)) {
