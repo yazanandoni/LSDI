@@ -76,12 +76,16 @@ public class BenchmarkService {
                     String pairId = fixturePath.getFileName().toString();
                     if (pairId.startsWith("_") || !seen.add(pairId)) continue;
                     BenchmarkFixture fixture = loader.loadFixture(pairId);
-                    int[] srcInfo = countCsvRowsAndColumns(resolvePath(fixture.source.file));
-                    int[] tgtInfo = countCsvRowsAndColumns(resolvePath(fixture.target.file));
-                    benchmarks.add(new BenchmarkDescriptor(pairId,
-                            srcInfo[0], srcInfo[1],
-                            tgtInfo[0], tgtInfo[1],
-                            fixture.source.key_columns, fixture.target.key_columns));
+                    try {
+                        int[] srcInfo = countCsvRowsAndColumns(resolvePath(fixture.source.file));
+                        int[] tgtInfo = countCsvRowsAndColumns(resolvePath(fixture.target.file));
+                        benchmarks.add(new BenchmarkDescriptor(pairId,
+                                srcInfo[0], srcInfo[1],
+                                tgtInfo[0], tgtInfo[1],
+                                fixture.source.key_columns, fixture.target.key_columns));
+                    } catch (IOException e) {
+                        System.err.println("Skipping fixture " + pairId + ": " + e.getMessage());
+                    }
                 }
             }
         }
