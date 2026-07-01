@@ -12,6 +12,7 @@ import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -20,14 +21,16 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class BenchmarkService {
     private final Path dataRoot;
-    private final Path fixtureDir;
-    private final BenchmarkFixtureLoader fixtureLoader;
+    private final List<Path> fixtureRoots;
+    private final List<BenchmarkFixtureLoader> fixtureLoaders;
     private final AutoJoin autoJoin = new AutoJoin();
 
     public record BenchmarkRunOutcome(BenchmarkSummary summary, String csv, AlgorithmTrace trace) {}
@@ -38,31 +41,42 @@ public class BenchmarkService {
             root = Files.exists(Paths.get("autojoin/data")) ? "autojoin" : ".";
         }
         this.dataRoot = Paths.get(root);
-        this.fixtureDir = this.dataRoot.resolve("data/fixtures/web-benchmark");
-        this.fixtureLoader = new BenchmarkFixtureLoader(fixtureDir);
+        this.fixtureRoots = List.of(
+                this.dataRoot.resolve("data/fixtures/web-benchmark"),
+                this.dataRoot.resolve("data/fixtures/dblp-scalability"));
+        this.fixtureLoaders = fixtureRoots.stream()
+                .map(BenchmarkFixtureLoader::new)
+                .toList();
     }
 
     @PostConstruct
     public void init() {
-        System.out.println("BenchmarkService: dataRoot=" + dataRoot.toAbsolutePath()
-                + ", has data dir=" + Files.exists(fixtureDir));
+        System.out.println("BenchmarkService: dataRoot=" + dataRoot.toAbsolutePath());
+        for (Path root : fixtureRoots) {
+            System.out.println("  fixture root: " + root + " exists=" + Files.exists(root));
+        }
     }
 
     public List<BenchmarkDescriptor> listBenchmarks() throws IOException {
-        if (!Files.exists(fixtureDir)) return List.of();
+        Set<String> seen = new LinkedHashSet<>();
         List<BenchmarkDescriptor> benchmarks = new ArrayList<>();
-        try (var paths = Files.list(fixtureDir)) {
-            for (Path fixturePath : paths.toList()) {
-                if (!Files.isDirectory(fixturePath)) continue;
-                String pairId = fixturePath.getFileName().toString();
-                if (pairId.startsWith("_")) continue;
-                BenchmarkFixture fixture = fixtureLoader.loadFixture(pairId);
-                Table sourceTable = loadTable(fixture.source.file, fixture.source.key_columns);
-                Table targetTable = loadTable(fixture.target.file, fixture.target.key_columns);
-                benchmarks.add(new BenchmarkDescriptor(pairId,
-                        sourceTable.numRows(), sourceTable.numColumns(),
-                        targetTable.numRows(), targetTable.numColumns(),
-                        fixture.source.key_columns, fixture.target.key_columns));
+        for (int i = 0; i < fixtureRoots.size(); i++) {
+            Path root = fixtureRoots.get(i);
+            if (!Files.exists(root)) continue;
+            BenchmarkFixtureLoader loader = fixtureLoaders.get(i);
+            try (var paths = Files.list(root)) {
+                for (Path fixturePath : paths.toList()) {
+                    if (!Files.isDirectory(fixturePath)) continue;
+                    String pairId = fixturePath.getFileName().toString();
+                    if (pairId.startsWith("_") || !seen.add(pairId)) continue;
+                    BenchmarkFixture fixture = loader.loadFixture(pairId);
+                    Table sourceTable = loadTable(fixture.source.file, fixture.source.key_columns);
+                    Table targetTable = loadTable(fixture.target.file, fixture.target.key_columns);
+                    benchmarks.add(new BenchmarkDescriptor(pairId,
+                            sourceTable.numRows(), sourceTable.numColumns(),
+                            targetTable.numRows(), targetTable.numColumns(),
+                            fixture.source.key_columns, fixture.target.key_columns));
+                }
             }
         }
         return benchmarks;
@@ -70,7 +84,7 @@ public class BenchmarkService {
 
     public BenchmarkRunOutcome runBenchmark(String pairId) throws IOException {
         long start = System.currentTimeMillis();
-        BenchmarkFixture fixture = fixtureLoader.loadFixture(pairId);
+        BenchmarkFixture fixture = loadFixture(pairId);
         Table sourceTable = loadTable(fixture.source.file, fixture.source.key_columns);
         Table targetTable = loadTable(fixture.target.file, fixture.target.key_columns);
 
@@ -171,6 +185,22 @@ public class BenchmarkService {
 
     private Path resolvePath(String relativePath) {
         return dataRoot.resolve(relativePath);
+    }
+
+    /**
+     * Load a fixture by pairId, searching each fixture root in order.
+     * Throws FileNotFoundException if not found in any root.
+     */
+    private BenchmarkFixture loadFixture(String pairId) throws IOException {
+        for (BenchmarkFixtureLoader loader : fixtureLoaders) {
+            try {
+                return loader.loadFixture(pairId);
+            } catch (FileNotFoundException e) {
+                // try next root
+            }
+        }
+        throw new FileNotFoundException("Fixture not found: " + pairId
+                + " (searched " + fixtureRoots + ")");
     }
 
     private Table loadTable(String relativePath, List<String> keyColumns) throws IOException {

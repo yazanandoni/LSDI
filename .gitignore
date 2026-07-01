@@ -4,6 +4,9 @@
 **/target/
 **/.idea/
 
+# Python
+__pycache__/
+
 # Ruflo / claude-flow plugin artifacts (added by `ruflo init`)
 CLAUDE.md
 .claude/

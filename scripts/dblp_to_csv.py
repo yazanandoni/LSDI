@@ -113,17 +113,10 @@ def main():
                     help="if set, write fixture.json (web-benchmark format) into this directory")
     args = ap.parse_args()
 
-    os.makedirs(args.outdir, exist_ok=True)
+os.makedirs(args.outdir, exist_ok=True)
     largest = max(args.n)
 
-    rows = []
-    for rec in records(args.dblp):
-        rows.append(rec)
-        if len(rows) >= largest:
-            break
-    print(f"collected {len(rows):,} complete records")
-
-    outdir_name = os.path.basename(os.path.normpath(args.outdir))
+    outdir_name = os.path.basename(os.path.normpath(os.path.abspath(args.outdir)))
 
     for n in sorted(args.n):
         if n > len(rows):
