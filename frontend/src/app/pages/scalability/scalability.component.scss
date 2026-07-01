@@ -1,0 +1,149 @@
+.section {
+  padding: 2rem 0;
+}
+
+.back-link {
+  display: inline-block;
+  font-size: 0.85rem;
+  color: var(--ocean-500);
+  margin-bottom: 0.75rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.back-link:hover {
+  text-decoration: underline;
+}
+
+.section__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+.eyebrow {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ocean-500);
+  margin: 0;
+}
+
+h2 {
+  margin: 0.3rem 0 0;
+}
+
+.helper {
+  color: var(--ink-500);
+  margin: 0;
+  max-width: 600px;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.toolbar__count {
+  font-size: 0.85rem;
+  color: var(--ink-500);
+}
+
+.btn--primary {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.6rem 1.4rem;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  border: none;
+  background: var(--ocean-500, #0f4c5c);
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn--primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: #0a3642;
+}
+
+.timing-chart {
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.chart__canvas {
+  width: 100%;
+  height: 400px;
+}
+
+.results-table {
+  padding: 1.2rem;
+  overflow-x: auto;
+}
+
+.results-table h3 {
+  margin: 0 0 1rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+th {
+  text-align: left;
+  padding: 0.5rem 0.8rem;
+  border-bottom: 2px solid rgba(15, 76, 92, 0.15);
+  color: var(--ink-500);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+td {
+  padding: 0.5rem 0.8rem;
+  border-bottom: 1px solid rgba(15, 76, 92, 0.08);
+}
+
+.mono {
+  font-family: "Space Mono", monospace;
+  font-size: 0.82rem;
+}
+
+.strong {
+  font-weight: 700;
+  color: var(--ocean-500);
+}
+
+.empty {
+  padding: 2rem;
+  text-align: center;
+  color: var(--ink-500);
+}
+
+.status {
+  padding: 1rem;
+  margin-top: 1rem;
+  background: rgba(244, 162, 97, 0.1);
+}
+
+.card {
+  border-radius: var(--radius-sm, 8px);
+  border: 1px solid rgba(15, 76, 92, 0.12);
+  background: #fff;
+}

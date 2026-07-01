@@ -105,7 +105,9 @@ public class AutoJoin {
         JoinResult bestJoin = forwardWon ? winner.dr().join : orientSourceTarget(winner.dr().join);
 
         InputTablesTrace inputTables = buildInputTablesTrace(ts, tt);
-        AlgorithmTrace trace = new AlgorithmTrace(forwardWon, forward.trace, backward.trace, inputTables);
+        AlgorithmTrace trace = new AlgorithmTrace(forwardWon, forward.trace, backward.trace, inputTables,
+                winner.dr().discoveryMs, winner.dr().learningMs,
+                winner.dr().joinMs, winner.dr().fuzzyMs);
         return JoinResult.of(bestJoin.getJoinedPairs(), bestJoin.getTransformationDescription(), trace);
     }
 
@@ -146,16 +148,26 @@ public class AutoJoin {
          *  when two directions score equally (richer key preferred). */
         final int keyColumns;
         final DirectionTrace trace;
+        final long discoveryMs;
+        final long learningMs;
+        final long joinMs;
+        final long fuzzyMs;
 
-        DirectionResult(JoinResult join, int score, int keyColumns, DirectionTrace trace) {
+        DirectionResult(JoinResult join, int score, int keyColumns, DirectionTrace trace,
+                        long discoveryMs, long learningMs, long joinMs, long fuzzyMs) {
             this.join = join;
             this.score = score;
             this.keyColumns = keyColumns;
             this.trace = trace;
+            this.discoveryMs = discoveryMs;
+            this.learningMs = learningMs;
+            this.joinMs = joinMs;
+            this.fuzzyMs = fuzzyMs;
         }
 
         static DirectionResult empty() {
-            return new DirectionResult(JoinResult.empty(), 0, 0, DirectionTrace.empty());
+            return new DirectionResult(JoinResult.empty(), 0, 0, DirectionTrace.empty(),
+                    0, 0, 0, 0);
         }
     }
 
@@ -423,6 +435,8 @@ public class AutoJoin {
 
         List<ColumnPairMatches> matches =
                 discovery.findJoinableRowPairs(sourceSample, targetSample);
+        long t1 = System.nanoTime();
+        long discoveryMs = (t1 - t0) / 1_000_000;
         if (debug) System.err.printf("  [discovery] %d groups in %dms%n",
                 matches.size(), (System.nanoTime() - t0) / 1_000_000);
 
@@ -430,8 +444,9 @@ public class AutoJoin {
 
         if (matches.isEmpty()) return DirectionResult.empty();
 
-        long t1 = System.nanoTime();
+        long t1L = System.nanoTime();
         LearnedTransformation learned = learner.learn(matches, sourceSample, targetSample);
+        long learningMs = (t1L - t1) / 1_000_000;
         if (debug) System.err.printf("  [learn] total %dms%n", (System.nanoTime() - t1) / 1_000_000);
 
         if (learned == null) {
@@ -447,8 +462,10 @@ public class AutoJoin {
 
         LearningTrace learningTrace = buildLearningTrace(matches, learned, sourceTable, targetTable);
 
+                long t2 = System.nanoTime();
         List<Row[]> joinedPairs = TransformationLearner.applyJoin(
                 learned.program, sourceTable, targetTable, learned.targetColumnName);
+        long joinMs = (System.nanoTime() - t2) / 1_000_000;
 
         if (joinedPairs.isEmpty()) return DirectionResult.empty();
 
@@ -457,9 +474,11 @@ public class AutoJoin {
         ApplicationTrace applicationTrace = buildApplicationTrace(
                 joinedPairs, learned, sourceTable);
 
-        // Phase 4 (paper §5): constrained fuzzy join recovery of the rows the
+                // Phase 4 (paper §5): constrained fuzzy join recovery of the rows the
         // strict equi-join left unmatched.
+        long t3 = System.nanoTime();
         FuzzyRecoveryResult fuzzyResult = fuzzyRecover(learned, sourceTable, targetTable);
+        long fuzzyMs = (System.nanoTime() - t3) / 1_000_000;
         List<Row[]> allPairs = joinedPairs;
         FuzzyTrace fuzzyTrace = null;
         if (!fuzzyResult.pairs().isEmpty()) {
@@ -490,7 +509,8 @@ public class AutoJoin {
                 JoinResult.of(allPairs, learned.program.describe()),
                 learned.score,
                 distinctSourceColumns(learned.program),
-                directionTrace);
+                directionTrace,
+                discoveryMs, learningMs, joinMs, fuzzyMs);
     }
 
     /**
@@ -625,6 +645,7 @@ public class AutoJoin {
         // makes every stray target row grab a nearest source and floods the
         // result with false positives. Fewer source rows ⇒ higher (less
         // negative) score ⇒ wins.
-        return new DirectionResult(JoinResult.of(pairs, desc), -srcVals.size(), 1, DirectionTrace.empty());
+        return new DirectionResult(JoinResult.of(pairs, desc), -srcVals.size(), 1, DirectionTrace.empty(),
+                0, 0, 0, 0);
     }
 }

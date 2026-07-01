@@ -96,11 +96,16 @@ public class BenchmarkService {
         long elapsed = System.currentTimeMillis() - start;
 
         AlgorithmTrace trace = result.getTrace();
+        long idxMs = trace != null ? trace.getDiscoveryMs() : 0;
+        long lrnMs = trace != null ? trace.getLearningMs() : 0;
+        long jnMs  = trace != null ? trace.getJoinMs() : 0;
+        long fzMs  = trace != null ? trace.getFuzzyMs() : 0;
 
         String csv = buildResultCsv(result);
         if (result == null || result.isEmpty()) {
             return new BenchmarkRunOutcome(
-                new BenchmarkSummary(pairId, "unknown", 0, 0, gtMap.size(), 0.0, 0.0, elapsed, null, List.of()),
+                new BenchmarkSummary(pairId, "unknown", 0, 0, gtMap.size(), 0.0, 0.0, elapsed, null, List.of(),
+                        idxMs, lrnMs, jnMs, fzMs),
                 csv, trace);
         }
 
@@ -134,7 +139,8 @@ public class BenchmarkService {
 
         return new BenchmarkRunOutcome(
             new BenchmarkSummary(pairId, dirLabel, tp, result.size(), gtPairs, precision, recall, elapsed,
-                    result.getTransformationDescription(), mismatches),
+                    result.getTransformationDescription(), mismatches,
+                    idxMs, lrnMs, jnMs, fzMs),
             csv, trace);
     }
 
