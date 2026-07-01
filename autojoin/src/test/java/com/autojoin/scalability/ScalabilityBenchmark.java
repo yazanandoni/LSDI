@@ -51,7 +51,7 @@ class ScalabilityBenchmark {
         System.out.printf("%n%-10s %-10s %-11s %s%n", "N", "joined", "median_ms", "runs_ms");
         System.out.println("-".repeat(60));
         for (int n : sizes) {
-            Path dir = base.resolve("dblp_" + n);
+            Path dir = base.resolve(String.valueOf(n));
             if (!Files.isDirectory(dir)) {
                 System.out.printf("%-10d (missing %s — skipped)%n", n, dir);
                 continue;

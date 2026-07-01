@@ -42,12 +42,15 @@ if [ ! -f "$DATA/dblp.dtd" ]; then
   curl -L --fail -o "$DATA/dblp.dtd" https://dblp.org/xml/dblp.dtd
 fi
 
+FIXDIR="$ROOT/autojoin/data/fixtures/dblp-scalability"
+
 # --- 2. derive source/target CSVs (skip if the largest size exists) ---------
 LAST="$(printf '%s\n' $SIZES | sort -n | tail -1)"
-if [ ! -f "$DATA/dblp_${LAST}/target.csv" ]; then
+if [ ! -f "$DATA/${LAST}/target.csv" ]; then
   echo ">> parsing DBLP into source/target CSVs for N = $SIZES ..."
   # Run from $DATA so the XML's <!DOCTYPE ... "dblp.dtd"> resolves next to it.
-  ( cd "$DATA" && "$PYTHON" "$HERE/dblp_to_csv.py" dblp.xml.gz . --n $SIZES )
+  ( cd "$DATA" && "$PYTHON" "$HERE/dblp_to_csv.py" dblp.xml.gz . --n $SIZES \
+      --fixtures-dir "$FIXDIR" )
 else
   echo ">> CSVs already present, skipping parse (delete $DATA/dblp_* to regenerate)"
 fi
