@@ -98,6 +98,27 @@ h2 {
   margin: 0 0 1rem;
 }
 
+.toolbar__left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.method-select {
+  padding: 0.3rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid rgba(15, 76, 92, 0.25);
+  background: white;
+  font-family: "Space Mono", monospace;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.method-select:focus {
+  outline: none;
+  border-color: var(--ocean-500);
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

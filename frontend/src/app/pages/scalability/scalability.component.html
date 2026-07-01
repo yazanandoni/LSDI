@@ -6,64 +6,76 @@
       <h2>DBLP timing — Figure 8 reproduction</h2>
     </div>
     <p class="helper">
-      Runs AutoJoin on DBLP-derived tables at increasing sizes to measure sub-linear sample scaling.
+      Runs AutoJoin on DBLP-derived tables at increasing sizes. Select a method or "Compare all" to reproduce the paper's Figure 8.
     </p>
   </div>
 
   <div class="toolbar" *ngIf="dblpBenchmarks.length > 0">
     <div class="toolbar__left">
       <span class="toolbar__count">{{ dblpBenchmarks.length }} DBLP sizes available</span>
+      <select class="method-select" [(ngModel)]="selectedMethod">
+        <option *ngFor="let m of methods" [value]="m">{{ m }}</option>
+      </select>
     </div>
     <div class="toolbar__right">
-      <button class="btn btn--primary" (click)="runAll()" [disabled]="running">
-        {{ running ? 'Running...' : 'Run all DBLP sizes' }}
+      <button class="btn btn--primary" (click)="runSelected()" [disabled]="running">
+        {{ running ? 'Running...' : 'Run ' + (selectedMethod === 'Compare all' ? 'all methods' : selectedMethod) }}
       </button>
     </div>
   </div>
 
-  <div class="card timing-chart" *ngIf="rows.length > 0">
+  <div class="card timing-chart" *ngIf="hasResults">
     <div id="timingChart" class="chart__canvas"></div>
   </div>
 
-  <div class="card results-table" *ngIf="rows.length > 0; else noResults">
-    <h3>Timing breakdown</h3>
+  <div class="card results-table" *ngIf="hasResults; else noResults">
+    <h3>Timing by method</h3>
     <table>
       <thead>
         <tr>
           <th>Size</th>
           <th>Rows</th>
-          <th>Indexing</th>
-          <th>Learning</th>
-          <th>Join</th>
-          <th>Fuzzy</th>
-          <th>Total</th>
-          <th>Precision</th>
-          <th>Recall</th>
+          <th *ngFor="let m of activeMethods">{{ m }}</th>
         </tr>
       </thead>
       <tbody>
-        <tr *ngFor="let row of rows">
-          <td class="mono">{{ row.size | number }}</td>
-          <td class="mono">{{ row.sourceRows | number }}</td>
-          <td class="mono">{{ row.indexingMs }}ms</td>
-          <td class="mono">{{ row.learningMs }}ms</td>
-          <td class="mono">{{ row.joinMs }}ms</td>
-          <td class="mono">{{ row.fuzzyMs }}ms</td>
-          <td class="mono strong">{{ row.totalMs }}ms</td>
-          <td class="mono">{{ row.precision | number:'1.2-2' }}</td>
-          <td class="mono">{{ row.recall | number:'1.2-2' }}</td>
+        <tr *ngFor="let s of sizes">
+          <td class="mono">{{ s | number }}</td>
+          <td class="mono">{{ rowsFor(s, activeMethods[0])?.sourceRows || '' | number }}</td>
+          <td *ngFor="let m of activeMethods" class="mono">
+            {{ rowsFor(s, m)?.totalMs || '-' }}ms
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 style="margin-top: 1.5rem;">Precision / Recall</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Size</th>
+          <th *ngFor="let m of activeMethods">{{ m }} P/R</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let s of sizes">
+          <td class="mono">{{ s | number }}</td>
+          <td *ngFor="let m of activeMethods" class="mono">
+            <ng-container *ngIf="rowsFor(s, m) as r; else dash">{{ (r.precision | number:'1.2-2') + ' / ' + (r.recall | number:'1.2-2') }}</ng-container>
+            <ng-template #dash>-</ng-template>
+          </td>
         </tr>
       </tbody>
     </table>
   </div>
 
-  <div class="card status" *ngIf="statusMessage">
+  <div class="card status" *ngIf="statusMessage && running">
     <p>{{ statusMessage }}</p>
   </div>
 
   <ng-template #noResults>
     <div class="card empty">
-      <p>No DBLP scalability results yet. Click "Run all DBLP sizes" to execute the scalability test.</p>
+      <p>No DBLP scalability results yet. Select a method and click "Run" to execute the scalability test.</p>
     </div>
   </ng-template>
 </section>

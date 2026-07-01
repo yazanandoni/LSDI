@@ -114,6 +114,36 @@
   font-size: 0.8rem;
 }
 
+.benchmark-group {
+  margin-bottom: 2.5rem;
+}
+
+.group-title {
+  margin: 0 0 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid rgba(15, 76, 92, 0.1);
+  font-size: 1.1rem;
+}
+
+.col-method {
+  width: 90px;
+}
+
+.method-select {
+  padding: 0.25rem 0.4rem;
+  border-radius: 6px;
+  border: 1px solid rgba(15, 76, 92, 0.25);
+  background: white;
+  font-family: "Space Mono", monospace;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.method-select:focus {
+  outline: none;
+  border-color: var(--ocean-500);
+}
+
 .col-action {
   width: 80px;
   text-align: right;

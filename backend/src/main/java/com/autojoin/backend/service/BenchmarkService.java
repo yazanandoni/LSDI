@@ -5,6 +5,10 @@ import com.autojoin.JoinResult;
 import com.autojoin.backend.model.BenchmarkDescriptor;
 import com.autojoin.backend.model.BenchmarkSummary;
 import com.autojoin.backend.model.Mismatch;
+import com.autojoin.baselines.FuzzyJoinColumn;
+import com.autojoin.baselines.FuzzyJoinOracle;
+import com.autojoin.baselines.JoinMethod;
+import com.autojoin.baselines.SubstringMatching;
 import com.autojoin.model.Row;
 import com.autojoin.model.Table;
 import com.autojoin.trace.AlgorithmTrace;
@@ -83,46 +87,60 @@ public class BenchmarkService {
         return benchmarks;
     }
 
-    public BenchmarkRunOutcome runBenchmark(String pairId) throws IOException {
+    public BenchmarkRunOutcome runBenchmark(String pairId, String method) throws IOException {
         long start = System.currentTimeMillis();
         BenchmarkFixture fixture = loadFixture(pairId);
         Table sourceTable = loadTable(fixture.source.file, fixture.source.key_columns);
         Table targetTable = loadTable(fixture.target.file, fixture.target.key_columns);
+        List<String> srcKeyCols = fixture.source.key_columns;
+        List<String> tgtKeyCols = fixture.target.key_columns;
 
         Path gtCsvPath = resolvePath(fixture.ground_truth.file);
         int numSrcGtCols = fixture.ground_truth.source_key_columns.size();
         Map<String, List<String>> gtMap = loadGroundTruth(gtCsvPath, numSrcGtCols);
 
-        JoinResult result = autoJoin.join(sourceTable, targetTable);
-        long elapsed = System.currentTimeMillis() - start;
+        AlgorithmTrace trace = null;
+        String transformDesc = null;
+        List<Row[]> joinedPairs;
+        String dirLabel;
 
-        AlgorithmTrace trace = result.getTrace();
+        if (method == null || method.equals("AJ")) {
+            JoinResult result = autoJoin.join(sourceTable, targetTable);
+            trace = result.getTrace();
+            transformDesc = result.getTransformationDescription();
+            joinedPairs = result.getJoinedPairs();
+            dirLabel = !result.isEmpty() && isForwardDirection(result, srcKeyCols)
+                    ? "source -> target" : "target -> source";
+        } else {
+            JoinMethod baseline = getMethod(method);
+            JoinMethod.JoinInput input = new JoinMethod.JoinInput(
+                    sourceTable, targetTable, srcKeyCols, tgtKeyCols);
+            joinedPairs = baseline.join(input);
+            transformDesc = method;
+            dirLabel = sourceTable.getName() + " -> " + targetTable.getName();
+        }
+
+        long elapsed = System.currentTimeMillis() - start;
         long idxMs = trace != null ? trace.getDiscoveryMs() : 0;
         long lrnMs = trace != null ? trace.getLearningMs() : 0;
         long jnMs  = trace != null ? trace.getJoinMs() : 0;
         long fzMs  = trace != null ? trace.getFuzzyMs() : 0;
 
-        String csv = buildResultCsv(result);
-        if (result == null || result.isEmpty()) {
+        String csv = buildResultCsv(joinedPairs);
+        if (joinedPairs == null || joinedPairs.isEmpty()) {
             return new BenchmarkRunOutcome(
                 new BenchmarkSummary(pairId, "unknown", 0, 0, gtMap.size(), 0.0, 0.0, elapsed, null, List.of(),
-                        idxMs, lrnMs, jnMs, fzMs),
+                        idxMs, lrnMs, jnMs, fzMs, method != null ? method : "AJ"),
                 csv, trace);
         }
 
-        List<String> srcKeyCols = fixture.source.key_columns;
-        List<String> tgtKeyCols = fixture.target.key_columns;
-        boolean forward = isForwardDirection(result, srcKeyCols);
-
         int tp = 0;
         List<Mismatch> mismatches = new ArrayList<>();
-        for (Row[] pair : result.getJoinedPairs()) {
+        boolean forward = !method.equals("AJ") || isForwardDirection(
+                JoinResult.of(joinedPairs, transformDesc), srcKeyCols);
+        for (Row[] pair : joinedPairs) {
             Row srcRow = forward ? pair[0] : pair[1];
             Row tgtRow = forward ? pair[1] : pair[0];
-            // Positional fingerprints: name-based lookup collapses duplicate
-            // column names (chinese provinces has two "Hanzi" target columns,
-            // us presidents 4 two "Vice President" source columns) onto one
-            // value, falsely scoring correct joins as mismatches in the UI.
             String srcFp = positionalFingerprint(srcRow, srcKeyCols, "|");
             String tgtFp = positionalFingerprint(tgtRow, tgtKeyCols, " | ");
             List<String> expected = gtMap.get(srcFp);
@@ -134,22 +152,47 @@ public class BenchmarkService {
         }
 
         int gtPairs = gtMap.size();
-        double precision = gtPairs == 0 ? 0.0 : (double) tp / result.size();
+        double precision = gtPairs == 0 ? 0.0 : (double) tp / joinedPairs.size();
         double recall = gtPairs == 0 ? 0.0 : (double) tp / gtPairs;
-        String dirLabel = forward ? "source -> target" : "target -> source";
+        String methodLabel = method != null ? method : "AJ";
 
         return new BenchmarkRunOutcome(
-            new BenchmarkSummary(pairId, dirLabel, tp, result.size(), gtPairs, precision, recall, elapsed,
-                    result.getTransformationDescription(), mismatches,
-                    idxMs, lrnMs, jnMs, fzMs),
+            new BenchmarkSummary(pairId, dirLabel, tp, joinedPairs.size(), gtPairs, precision, recall, elapsed,
+                    transformDesc, mismatches,
+                    idxMs, lrnMs, jnMs, fzMs, methodLabel),
             csv, trace);
     }
 
-    private String buildResultCsv(JoinResult result) {
-        if (result == null || result.isEmpty()) return "";
-        List<Row[]> pairs = result.getJoinedPairs();
-        Row firstSource = pairs.get(0)[0];
-        Row firstTarget = pairs.get(0)[1];
+    public List<BenchmarkRunOutcome> runBenchmarks(List<String> pairIds, String method) throws IOException {
+        List<BenchmarkRunOutcome> outcomes = new ArrayList<>();
+        for (String pairId : pairIds) {
+            outcomes.add(runBenchmark(pairId, method));
+        }
+        return outcomes;
+    }
+
+    public List<BenchmarkRunOutcome> runBenchmarks(List<String> pairIds, List<String> methods) throws IOException {
+        List<BenchmarkRunOutcome> outcomes = new ArrayList<>();
+        for (int i = 0; i < pairIds.size(); i++) {
+            String method = (methods != null && i < methods.size()) ? methods.get(i) : "AJ";
+            outcomes.add(runBenchmark(pairIds.get(i), method));
+        }
+        return outcomes;
+    }
+
+    private JoinMethod getMethod(String name) {
+        return switch (name) {
+            case "SM" -> new SubstringMatching();
+            case "FJ-C" -> new FuzzyJoinColumn();
+            case "FJ-O" -> new FuzzyJoinOracle();
+            default -> throw new IllegalArgumentException("Unknown method: " + name);
+        };
+    }
+
+    private String buildResultCsv(List<Row[]> joinedPairs) {
+        if (joinedPairs == null || joinedPairs.isEmpty()) return "";
+        Row firstSource = joinedPairs.get(0)[0];
+        Row firstTarget = joinedPairs.get(0)[1];
 
         StringBuilder sb = new StringBuilder();
         for (String col : firstSource.getColumnNames()) {
@@ -161,7 +204,7 @@ public class BenchmarkService {
         sb.setLength(sb.length() - 1);
         sb.append("\n");
 
-        for (Row[] pair : pairs) {
+        for (Row[] pair : joinedPairs) {
             for (int i = 0; i < pair[0].size(); i++) {
                 sb.append(escapeCsv(pair[0].get(i))).append(",");
             }
@@ -180,14 +223,6 @@ public class BenchmarkService {
             return "\"" + value.replace("\"", "\"\"") + "\"";
         }
         return value;
-    }
-
-    public List<BenchmarkRunOutcome> runBenchmarks(List<String> pairIds) throws IOException {
-        List<BenchmarkRunOutcome> outcomes = new ArrayList<>();
-        for (String pairId : pairIds) {
-            outcomes.add(runBenchmark(pairId));
-        }
-        return outcomes;
     }
 
     private Path resolvePath(String relativePath) {

@@ -17,6 +17,7 @@ public record BenchmarkSummaryView(
         long indexingTimeMs,
         long learningTimeMs,
         long joinTimeMs,
-        long fuzzyTimeMs
+        long fuzzyTimeMs,
+        String method
 ) {
 }

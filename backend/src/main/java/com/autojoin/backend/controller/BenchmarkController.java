@@ -44,7 +44,8 @@ public class BenchmarkController {
     @PostMapping("/benchmarks/run")
     public ResponseEntity<ResultIdResponse> runBenchmark(@Valid @RequestBody BenchmarkRunRequest request)
             throws IOException {
-        BenchmarkRunOutcome outcome = benchmarkService.runBenchmark(request.pairId());
+        String method = request.method() != null ? request.method() : "AJ";
+        BenchmarkRunOutcome outcome = benchmarkService.runBenchmark(request.pairId(), method);
         String resultId = resultStore.save(outcome.summary());
         resultStore.saveCsv(resultId, outcome.csv());
         resultStore.saveTrace(resultId, outcome.trace());
@@ -55,7 +56,7 @@ public class BenchmarkController {
     public ResponseEntity<List<ResultIdResponse>> runAllBenchmarks() throws IOException {
         List<BenchmarkDescriptor> all = benchmarkService.listBenchmarks();
         List<String> pairIds = all.stream().map(BenchmarkDescriptor::pairId).toList();
-        List<BenchmarkRunOutcome> outcomes = benchmarkService.runBenchmarks(pairIds);
+        List<BenchmarkRunOutcome> outcomes = benchmarkService.runBenchmarks(pairIds, "AJ");
         List<ResultIdResponse> ids = outcomes.stream()
                 .map(o -> {
                     String id = resultStore.save(o.summary());
@@ -70,7 +71,14 @@ public class BenchmarkController {
     @PostMapping("/benchmarks/run-batch")
     public ResponseEntity<List<ResultIdResponse>> runBatch(@RequestBody BatchRunRequest request)
             throws IOException {
-        List<BenchmarkRunOutcome> outcomes = benchmarkService.runBenchmarks(request.pairIds());
+        List<String> methods = request.methods();
+        List<BenchmarkRunOutcome> outcomes;
+        if (methods != null && !methods.isEmpty()) {
+            List<String> pairIds = request.pairIds();
+            outcomes = benchmarkService.runBenchmarks(pairIds, methods);
+        } else {
+            outcomes = benchmarkService.runBenchmarks(request.pairIds(), "AJ");
+        }
         List<ResultIdResponse> ids = outcomes.stream()
                 .map(o -> {
                     String id = resultStore.save(o.summary());
@@ -120,6 +128,7 @@ public class BenchmarkController {
                 summary.precision(), summary.recall(), summary.durationMs(),
                 summary.transformation(), summary.mismatches(),
                 summary.indexingTimeMs(), summary.learningTimeMs(),
-                summary.joinTimeMs(), summary.fuzzyTimeMs());
+                summary.joinTimeMs(), summary.fuzzyTimeMs(),
+                summary.method());
     }
 }

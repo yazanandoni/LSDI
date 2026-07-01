@@ -13,7 +13,6 @@ import { BenchmarkSummaryView } from '../../app.models';
 })
 export class DashboardComponent implements OnInit {
   recentResults: BenchmarkSummaryView[] = [];
-  running = false;
   summaryStats = {
     totalRuns: 0,
     avgPrecision: 0,
@@ -36,19 +35,6 @@ export class DashboardComponent implements OnInit {
           avgPrecision: precisionSum / results.length,
           avgRecall: recallSum / results.length
         };
-      }
-    });
-  }
-
-  runAll(): void {
-    this.running = true;
-    this.benchmarkService.runAllBenchmarks().subscribe({
-      next: () => {
-        this.running = false;
-        this.router.navigate(['/results']);
-      },
-      error: () => {
-        this.running = false;
       }
     });
   }

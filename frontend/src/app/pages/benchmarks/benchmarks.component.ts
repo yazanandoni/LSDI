@@ -1,19 +1,23 @@
 import { Component, OnInit } from '@angular/core';
 import { NgFor, NgIf } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
+import { FormsModule } from '@angular/forms';
 import { BenchmarkService } from '../../services/benchmark.service';
 import { BenchmarkDescriptor } from '../../app.models';
 
 @Component({
   selector: 'app-benchmarks',
   standalone: true,
-  imports: [RouterLink, NgFor, NgIf],
+  imports: [RouterLink, NgFor, NgIf, FormsModule],
   templateUrl: './benchmarks.component.html',
   styleUrl: './benchmarks.component.scss'
 })
 export class BenchmarksComponent implements OnInit {
   benchmarks: BenchmarkDescriptor[] = [];
-  selectedIds = new Set<string>();
+  methods = ['AJ', 'SM', 'FJ-C', 'FJ-O'];
+  webSelectedIds = new Set<string>();
+  dblpSelectedIds = new Set<string>();
+  methodMap = new Map<string, string>();
   running = false;
   statusMessage = '';
 
@@ -28,20 +32,53 @@ export class BenchmarksComponent implements OnInit {
     });
   }
 
-  toggleSelection(pairId: string): void {
-    if (this.selectedIds.has(pairId)) {
-      this.selectedIds.delete(pairId);
+  get webBenchmarks(): BenchmarkDescriptor[] {
+    return this.benchmarks.filter(b => !b.pairId.startsWith('dblp-'));
+  }
+
+  get dblpBenchmarks(): BenchmarkDescriptor[] {
+    return this.benchmarks.filter(b => b.pairId.startsWith('dblp-'));
+  }
+
+  getMethod(pairId: string): string {
+    return this.methodMap.get(pairId) || 'AJ';
+  }
+
+  setMethod(pairId: string, method: string): void {
+    this.methodMap.set(pairId, method);
+  }
+
+  toggleWebSelection(pairId: string): void {
+    if (this.webSelectedIds.has(pairId)) {
+      this.webSelectedIds.delete(pairId);
     } else {
-      this.selectedIds.add(pairId);
+      this.webSelectedIds.add(pairId);
     }
   }
 
-  runSelected(): void {
-    const ids = Array.from(this.selectedIds);
+  toggleDblpSelection(pairId: string): void {
+    if (this.dblpSelectedIds.has(pairId)) {
+      this.dblpSelectedIds.delete(pairId);
+    } else {
+      this.dblpSelectedIds.add(pairId);
+    }
+  }
+
+  runWebSelected(): void {
+    this.runSelected(this.webSelectedIds);
+  }
+
+  runDblpSelected(): void {
+    this.runSelected(this.dblpSelectedIds);
+  }
+
+  private runSelected(selectedIds: Set<string>): void {
+    const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
+    const methods = ids.map(id => this.methodMap.get(id) || 'AJ');
     this.running = true;
     this.statusMessage = `Running ${ids.length} benchmark(s)...`;
-    this.benchmarkService.runBatch(ids).subscribe({
+    this.benchmarkService.runBatch(ids, methods).subscribe({
       next: () => {
         this.running = false;
         this.router.navigate(['/results']);
@@ -53,10 +90,10 @@ export class BenchmarksComponent implements OnInit {
     });
   }
 
-  runSingle(pairId: string): void {
+  runSingle(pairId: string, method: string): void {
     this.running = true;
-    this.statusMessage = `Running ${pairId}...`;
-    this.benchmarkService.runBenchmark(pairId).subscribe({
+    this.statusMessage = `Running ${pairId} (${method})...`;
+    this.benchmarkService.runBenchmark(pairId, method).subscribe({
       next: () => {
         this.running = false;
         this.router.navigate(['/results']);
@@ -68,11 +105,19 @@ export class BenchmarksComponent implements OnInit {
     });
   }
 
-  selectAll(): void {
-    this.benchmarks.forEach(b => this.selectedIds.add(b.pairId));
+  webSelectAll(): void {
+    this.webBenchmarks.forEach(b => this.webSelectedIds.add(b.pairId));
   }
 
-  deselectAll(): void {
-    this.selectedIds.clear();
+  webDeselectAll(): void {
+    this.webSelectedIds.clear();
+  }
+
+  dblpSelectAll(): void {
+    this.dblpBenchmarks.forEach(b => this.dblpSelectedIds.add(b.pairId));
+  }
+
+  dblpDeselectAll(): void {
+    this.dblpSelectedIds.clear();
   }
 }

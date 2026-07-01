@@ -17,16 +17,16 @@ export class BenchmarkService {
     return this.http.get<BenchmarkDescriptor[]>(`${API_BASE_URL}/benchmarks`);
   }
 
-  runBenchmark(pairId: string): Observable<ResultIdResponse> {
-    return this.http.post<ResultIdResponse>(`${API_BASE_URL}/benchmarks/run`, { pairId });
+  runBenchmark(pairId: string, method = 'AJ'): Observable<ResultIdResponse> {
+    return this.http.post<ResultIdResponse>(`${API_BASE_URL}/benchmarks/run`, { pairId, method });
   }
 
   runAllBenchmarks(): Observable<ResultIdResponse[]> {
     return this.http.post<ResultIdResponse[]>(`${API_BASE_URL}/benchmarks/run-all`, {});
   }
 
-  runBatch(pairIds: string[]): Observable<ResultIdResponse[]> {
-    return this.http.post<ResultIdResponse[]>(`${API_BASE_URL}/benchmarks/run-batch`, { pairIds });
+  runBatch(pairIds: string[], methods?: string[]): Observable<ResultIdResponse[]> {
+    return this.http.post<ResultIdResponse[]>(`${API_BASE_URL}/benchmarks/run-batch`, { pairIds, methods });
   }
 
   listResults(): Observable<BenchmarkSummaryView[]> {

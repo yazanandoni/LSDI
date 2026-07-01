@@ -38,4 +38,5 @@ export interface BenchmarkSummaryView {
   learningTimeMs: number;
   joinTimeMs: number;
   fuzzyTimeMs: number;
+  method: string;
 }
