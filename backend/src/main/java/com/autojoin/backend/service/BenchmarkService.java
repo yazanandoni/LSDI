@@ -111,25 +111,26 @@ public class BenchmarkService {
         String transformDesc = null;
         List<Row[]> joinedPairs;
         String dirLabel;
+        String methodLabel = method != null ? method : "AJ";
 
         if ("SM".equals(method) && sourceTable.numRows() > SM_MAX_ROWS) {
             joinedPairs = List.of();
             transformDesc = "SM skipped: exceeds " + SM_MAX_ROWS + "-row practical limit";
-            dirLabel = "source -> target";
+            dirLabel = methodLabel + ": source -> target";
         } else if (method == null || method.equals("AJ")) {
             JoinResult result = autoJoin.join(sourceTable, targetTable);
             trace = result.getTrace();
             transformDesc = result.getTransformationDescription();
             joinedPairs = result.getJoinedPairs();
-            dirLabel = !result.isEmpty() && isForwardDirection(result, srcKeyCols)
-                    ? "source -> target" : "target -> source";
+            dirLabel = methodLabel + ": " + (!result.isEmpty() && isForwardDirection(result, srcKeyCols)
+                    ? "source -> target" : "target -> source");
         } else {
             JoinMethod baseline = getMethod(method);
             JoinMethod.JoinInput input = new JoinMethod.JoinInput(
                     sourceTable, targetTable, srcKeyCols, tgtKeyCols);
             joinedPairs = baseline.join(input);
             transformDesc = method;
-            dirLabel = sourceTable.getName() + " -> " + targetTable.getName();
+            dirLabel = methodLabel + ": source -> target";
         }
 
         long elapsed = System.currentTimeMillis() - start;
@@ -141,8 +142,8 @@ public class BenchmarkService {
         String csv = buildResultCsv(joinedPairs);
         if (joinedPairs == null || joinedPairs.isEmpty()) {
             return new BenchmarkRunOutcome(
-                new BenchmarkSummary(pairId, "unknown", 0, 0, gtMap.size(), 0.0, 0.0, elapsed, null, List.of(),
-                        idxMs, lrnMs, jnMs, fzMs, method != null ? method : "AJ"),
+                new BenchmarkSummary(pairId, methodLabel + ": empty", 0, 0, gtMap.size(), 0.0, 0.0, elapsed, null, List.of(),
+                        idxMs, lrnMs, jnMs, fzMs, methodLabel),
                 csv, trace);
         }
 

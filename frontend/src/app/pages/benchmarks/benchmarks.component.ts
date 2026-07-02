@@ -48,6 +48,30 @@ export class BenchmarksComponent implements OnInit {
     }
   }
 
+  runAllFourMethods(): void {
+    const ids: string[] = [];
+    const methods: string[] = [];
+    for (const b of this.benchmarks) {
+      for (const m of this.allMethods) {
+        ids.push(b.pairId);
+        methods.push(m);
+      }
+    }
+    if (ids.length === 0) return;
+    this.running = true;
+    this.statusMessage = `Running ${ids.length} jobs (${this.benchmarks.length} pairs × 4 methods)...`;
+    this.benchmarkService.runBatch(ids, methods).subscribe({
+      next: () => {
+        this.running = false;
+        this.router.navigate(['/results']);
+      },
+      error: (err) => {
+        this.running = false;
+        this.statusMessage = 'Error: ' + (err.message || 'failed to run');
+      }
+    });
+  }
+
   runSelected(): void {
     const ids: string[] = [];
     const methods: string[] = [];
