@@ -92,6 +92,9 @@ public class BenchmarkService {
         return benchmarks;
     }
 
+    /** SM is O(N²·candidates); cap at 5K as the paper shows it times out at 10K. */
+    private static final int SM_MAX_ROWS = 5_000;
+
     public BenchmarkRunOutcome runBenchmark(String pairId, String method) throws IOException {
         long start = System.currentTimeMillis();
         BenchmarkFixture fixture = loadFixture(pairId);
@@ -109,7 +112,11 @@ public class BenchmarkService {
         List<Row[]> joinedPairs;
         String dirLabel;
 
-        if (method == null || method.equals("AJ")) {
+        if ("SM".equals(method) && sourceTable.numRows() > SM_MAX_ROWS) {
+            joinedPairs = List.of();
+            transformDesc = "SM skipped: exceeds " + SM_MAX_ROWS + "-row practical limit";
+            dirLabel = "source -> target";
+        } else if (method == null || method.equals("AJ")) {
             JoinResult result = autoJoin.join(sourceTable, targetTable);
             trace = result.getTrace();
             transformDesc = result.getTransformationDescription();
