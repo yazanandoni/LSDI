@@ -77,6 +77,30 @@ import { InfoTipComponent } from './info-tip.component';
           </div>
         }
       </div>
+    } @else if (trace && trace.skipped && trace.unmatchedBeforeFuzzy > 0) {
+      <div class="fuzzy">
+        <div class="fuzzy__header">
+          <div>
+            <h3>4. Fuzzy Join Recovery</h3>
+            <p class="helper">
+              Recovering rows that almost matched the equi-join key using
+              constrained Jaccard-distance matching.
+            </p>
+          </div>
+        </div>
+        <div class="card info-card">
+          <div class="info-card__icon">⏭️</div>
+          <div>
+            <p class="info-card__title">Fuzzy recovery skipped</p>
+            <p class="info-card__body">
+              {{ trace.unmatchedBeforeFuzzy }} source rows were unmatched after the equi-join,
+              but every unique target value already has at least one match.
+              The unmatched rows are duplicates or produce a key that does not
+              correspond to any target record &mdash; fuzzy recovery cannot help.
+            </p>
+          </div>
+        </div>
+      </div>
     } @else if (trace) {
       <div class="fuzzy">
         <div class="fuzzy__header">
@@ -130,6 +154,34 @@ import { InfoTipComponent } from './info-tip.component';
       color: var(--ink-500);
       font-size: 0.88rem;
       margin: 0;
+    }
+
+    .info-card {
+      display: flex;
+      gap: 1rem;
+      align-items: flex-start;
+      padding: 1.2rem;
+      background: rgba(244, 162, 97, 0.10);
+      border: 1px solid rgba(244, 162, 97, 0.25);
+      border-radius: var(--radius-sm);
+    }
+
+    .info-card__icon {
+      font-size: 1.4rem;
+      flex-shrink: 0;
+    }
+
+    .info-card__title {
+      font-weight: 700;
+      margin: 0 0 0.3rem;
+      color: var(--ink-900);
+    }
+
+    .info-card__body {
+      margin: 0;
+      color: var(--ink-500);
+      font-size: 0.88rem;
+      line-height: 1.5;
     }
 
     .flow-node {

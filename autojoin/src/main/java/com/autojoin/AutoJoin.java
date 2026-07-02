@@ -480,7 +480,8 @@ public class AutoJoin {
         FuzzyRecoveryResult fuzzyResult = fuzzyRecover(learned, sourceTable, targetTable);
         long fuzzyMs = (System.nanoTime() - t3) / 1_000_000;
         List<Row[]> allPairs = joinedPairs;
-        FuzzyTrace fuzzyTrace = null;
+        int unmatchedBefore = fuzzyResult.unmatchedBeforeFuzzy();
+        FuzzyTrace fuzzyTrace;
         if (!fuzzyResult.pairs().isEmpty()) {
             allPairs = new ArrayList<>(joinedPairs);
             allPairs.addAll(fuzzyResult.pairs());
@@ -493,13 +494,17 @@ public class AutoJoin {
                 String tgtVal = safeGet(targetTable.getRow(fr.targetRowIndex), learned.targetColumnName);
                 samples.add(new FuzzyRecoveryMatch(srcVal, tgtVal, fr.distance));
             }
-            int remaining = fuzzyResult.unmatchedBeforeFuzzy() - fuzzyResult.pairs().size();
+            int remaining = unmatchedBefore - fuzzyResult.pairs().size();
             fuzzyTrace = new FuzzyTrace(
                     fuzzyResult.pairs().size(),
                     fuzzyResult.threshold(),
-                    fuzzyResult.unmatchedBeforeFuzzy(),
+                    unmatchedBefore,
                     remaining,
                     samples);
+        } else if (unmatchedBefore > 0) {
+            fuzzyTrace = new FuzzyTrace(unmatchedBefore, unmatchedBefore, true);
+        } else {
+            fuzzyTrace = new FuzzyTrace(0, 0, true);
         }
         if (debug) System.err.printf("  [fuzzy] recovered %d of unmatched rows%n", fuzzyResult.pairs().size());
 

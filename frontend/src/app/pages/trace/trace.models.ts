@@ -107,6 +107,7 @@ export interface FuzzyTrace {
   unmatchedBeforeFuzzy: number;
   remainingUnmatched: number;
   sampleRecovered: FuzzyRecoveryMatch[];
+  skipped: boolean;
 }
 
 export interface FuzzyRecoveryMatch {
