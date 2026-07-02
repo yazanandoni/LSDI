@@ -167,7 +167,6 @@ public class BenchmarkService {
         int gtPairs = gtMap.size();
         double precision = gtPairs == 0 ? 0.0 : (double) tp / joinedPairs.size();
         double recall = gtPairs == 0 ? 0.0 : (double) tp / gtPairs;
-        String methodLabel = method != null ? method : "AJ";
 
         return new BenchmarkRunOutcome(
             new BenchmarkSummary(pairId, dirLabel, tp, joinedPairs.size(), gtPairs, precision, recall, elapsed,
