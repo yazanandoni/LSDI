@@ -480,7 +480,8 @@ public class AutoJoin {
         FuzzyRecoveryResult fuzzyResult = fuzzyRecover(learned, sourceTable, targetTable);
         long fuzzyMs = (System.nanoTime() - t3) / 1_000_000;
         List<Row[]> allPairs = joinedPairs;
-        FuzzyTrace fuzzyTrace = null;
+        int unmatchedBefore = fuzzyResult.unmatchedBeforeFuzzy();
+        FuzzyTrace fuzzyTrace;
         if (!fuzzyResult.pairs().isEmpty()) {
             allPairs = new ArrayList<>(joinedPairs);
             allPairs.addAll(fuzzyResult.pairs());
@@ -493,13 +494,17 @@ public class AutoJoin {
                 String tgtVal = safeGet(targetTable.getRow(fr.targetRowIndex), learned.targetColumnName);
                 samples.add(new FuzzyRecoveryMatch(srcVal, tgtVal, fr.distance));
             }
-            int remaining = fuzzyResult.unmatchedBeforeFuzzy() - fuzzyResult.pairs().size();
+            int remaining = unmatchedBefore - fuzzyResult.pairs().size();
             fuzzyTrace = new FuzzyTrace(
                     fuzzyResult.pairs().size(),
                     fuzzyResult.threshold(),
-                    fuzzyResult.unmatchedBeforeFuzzy(),
+                    unmatchedBefore,
                     remaining,
                     samples);
+        } else if (unmatchedBefore > 0) {
+            fuzzyTrace = new FuzzyTrace(unmatchedBefore, unmatchedBefore, true);
+        } else {
+            fuzzyTrace = new FuzzyTrace(0, 0, true);
         }
         if (debug) System.err.printf("  [fuzzy] recovered %d of unmatched rows%n", fuzzyResult.pairs().size());
 
@@ -513,11 +518,6 @@ public class AutoJoin {
                 discoveryMs, learningMs, joinMs, fuzzyMs);
     }
 
-    /** Max unmatched rows for which fuzzy recovery is attempted. Above this,
-     *  the q-gram index alone costs too much memory (paper §5 is a recovery net
-     *  for formatting near-misses, not a bulk re-join). */
-    private static final int MAX_FUZZY_UNMATCHED = 10_000;
-
     /**
      * §5 constrained fuzzy join recovery. The transformation equi-join only
      * emits clean 1:1 matches, so rows whose derived key narrowly misses the
@@ -527,10 +527,6 @@ public class AutoJoin {
      * threshold auto-tuned over the full columns — already-joined values
      * constrain it, so no equi-joined row can gain a second (wrong) match and
      * ambiguous matches the equi-join deliberately dropped are not re-admitted.
-     *
-     * <p>When {@code unmatchedCount > MAX_FUZZY_UNMATCHED} the recovery is
-     * skipped because the q-gram index on millions of values would OOM and the
-     * paper's recovery model assumes a sparse near-miss tail, not a bulk miss.
      */
     private static FuzzyRecoveryResult fuzzyRecover(LearnedTransformation learned,
                                                     Table sourceTable, Table targetTable) {
@@ -572,7 +568,7 @@ public class AutoJoin {
                     && derivedCounts.getOrDefault(v, 0) >= 1;
             if (!tgtMatched[j]) anyUnmatchedTgt = true;
         }
-        if (unmatchedCount == 0 || !anyUnmatchedTgt || unmatchedCount > MAX_FUZZY_UNMATCHED) {
+        if (unmatchedCount == 0 || !anyUnmatchedTgt) {
             return new FuzzyRecoveryResult(List.of(), List.of(), 0.0, unmatchedCount);
         }
 

@@ -12,13 +12,16 @@
     <div class="toolbar__left">
       <span class="toolbar__count">{{ selectedIds.size }} / {{ benchmarks.length }} selected</span>
     </div>
-    <div class="toolbar__right">
-      <button class="btn btn--ghost-sm" (click)="selectAll()">Select all</button>
-      <button class="btn btn--ghost-sm" (click)="deselectAll()">Deselect all</button>
-      <button class="btn btn--primary" (click)="runSelected()" [disabled]="selectedIds.size === 0 || running">
-        {{ running ? 'Running...' : 'Run selected (' + selectedIds.size + ')' }}
-      </button>
-    </div>
+<div class="toolbar__right">
+        <button class="btn btn--primary" (click)="runAllFourMethods()" [disabled]="running || benchmarks.length === 0">
+          {{ running ? 'Running...' : 'Run all × 4 methods (' + (benchmarks.length * 4) + ' jobs)' }}
+        </button>
+        <button class="btn btn--ghost-sm" (click)="selectAll()">Select all</button>
+        <button class="btn btn--ghost-sm" (click)="deselectAll()">Deselect all</button>
+        <button class="btn btn--primary" (click)="runSelected()" [disabled]="selectedIds.size === 0 || running">
+          {{ running ? 'Running...' : 'Run selected (' + selectedIds.size + ')' }}
+        </button>
+      </div>
   </div>
 
   <div class="table-wrap card" *ngIf="benchmarks.length > 0; else emptyState">
