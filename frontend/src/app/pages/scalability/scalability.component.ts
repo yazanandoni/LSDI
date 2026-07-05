@@ -6,10 +6,10 @@ import { BenchmarkService } from '../../services/benchmark.service';
 import { BenchmarkDescriptor } from '../../app.models';
 import * as echarts from 'echarts/core';
 import { LineChart } from 'echarts/charts';
-import { GridComponent, LegendComponent, TitleComponent, TooltipComponent } from 'echarts/components';
+import { GridComponent, LegendComponent, MarkLineComponent, TitleComponent, TooltipComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 
-echarts.use([LineChart, GridComponent, LegendComponent, TitleComponent, TooltipComponent, CanvasRenderer]);
+echarts.use([LineChart, GridComponent, LegendComponent, MarkLineComponent, TitleComponent, TooltipComponent, CanvasRenderer]);
 
 interface ScalabilityRow {
   size: number;
@@ -18,6 +18,7 @@ interface ScalabilityRow {
   totalMs: number;
   precision: number;
   recall: number;
+  timedOut: boolean;
 }
 
 @Component({
@@ -55,47 +56,41 @@ export class ScalabilityComponent implements OnInit, OnDestroy {
   }
 
   runSelected(): void {
-    const pairIds = this.dblpBenchmarks.map(b => b.pairId);
+    const pairIds = this.dblpBenchmarks.map(b => b.pairId); // sorted small -> large
     if (pairIds.length === 0) return;
+    const methods = this.selectedMethod === 'Compare all'
+      ? ['AJ', 'SM', 'FJ-C', 'FJ-O'] : [this.selectedMethod];
+
+    // One HTTP request per run, strictly sequential: parallel runs compete for
+    // CPU and distort the timing curves, and a single batched request would
+    // outlive the browser's connection limit once a baseline hits its budget.
+    const runs: { pairId: string; method: string }[] = [];
+    for (const m of methods) {
+      for (const id of pairIds) runs.push({ pairId: id, method: m });
+    }
 
     this.running = true;
-    const isCompare = this.selectedMethod === 'Compare all';
-    const methods = isCompare ? ['AJ', 'SM', 'FJ-C', 'FJ-O'] : [this.selectedMethod];
-    this.statusMessage = `Running ${pairIds.length} DBLP size(s) with ${isCompare ? 'all 4 methods' : this.selectedMethod}...`;
-
-    const mkMethods = (m: string) => pairIds.map(() => m);
-
-    if (isCompare) {
-      let completed = 0;
-      for (const m of methods) {
-        this.benchmarkService.runBatch(pairIds, mkMethods(m)).subscribe({
-          next: () => {
-            completed++;
-            if (completed === methods.length) {
-              this.statusMessage = 'All runs complete.';
-              this.running = false;
-              this.loadResults();
-            }
-          },
-          error: (err) => {
-            this.statusMessage = 'Error: ' + err.message;
-            this.running = false;
-          }
-        });
+    const failures: string[] = [];
+    let i = 0;
+    const next = () => {
+      if (i >= runs.length) {
+        this.running = false;
+        this.statusMessage = failures.length > 0
+          ? `Done with errors: ${failures.join('; ')}` : 'All runs complete.';
+        this.loadResults();
+        return;
       }
-    } else {
-      this.benchmarkService.runBatch(pairIds, mkMethods(this.selectedMethod)).subscribe({
-        next: () => {
-          this.statusMessage = 'All runs complete.';
-          this.running = false;
-          this.loadResults();
-        },
+      const run = runs[i++];
+      this.statusMessage = `Running ${i}/${runs.length}: ${run.pairId} (${run.method})...`;
+      this.benchmarkService.runBenchmark(run.pairId, run.method).subscribe({
+        next: () => next(),
         error: (err) => {
-          this.statusMessage = 'Error: ' + err.message;
-          this.running = false;
+          failures.push(`${run.pairId} ${run.method}: ${err.message || 'failed'}`);
+          next();
         }
       });
-    }
+    };
+    next();
   }
 
   private loadResults(): void {
@@ -111,7 +106,8 @@ export class ScalabilityComponent implements OnInit, OnDestroy {
             method: r.method || 'AJ',
             totalMs: r.durationMs,
             precision: r.precision,
-            recall: r.recall
+            recall: r.recall,
+            timedOut: r.timedOut
           };
         })
         .sort((a, b) => a.size - b.size || a.method.localeCompare(b.method));
@@ -159,12 +155,12 @@ export class ScalabilityComponent implements OnInit, OnDestroy {
     const symbols: Record<string, string> = {
       'AJ': 'circle', 'SM': 'diamond', 'FJ-C': 'triangle', 'FJ-O': 'rect'
     };
-    const series = this.activeMethods.map(m => ({
+    const series: any[] = this.activeMethods.map(m => ({
       name: m,
       type: 'line',
       data: sizes.map(s => {
         const r = this.rows.find(x => x.size === s && x.method === m);
-        return r ? r.totalMs : null;
+        return r ? { value: r.totalMs, timedOut: r.timedOut } : null;
       }),
       smooth: false,
       symbol: symbols[m] || 'circle',
@@ -172,6 +168,24 @@ export class ScalabilityComponent implements OnInit, OnDestroy {
       itemStyle: { color: colors[m] || '#999' },
       connectNulls: false
     }));
+
+    // Dashed cutoff line at the time budget, like the paper's Figure 8 where
+    // SM/FJ-O stop at 10K rows and FJ-C at 100K ("timeout at 2 hours").
+    const timedOutMs = this.rows.filter(r => r.timedOut).map(r => r.totalMs);
+    if (timedOutMs.length > 0 && series.length > 0) {
+      series[0].markLine = {
+        silent: true,
+        symbol: 'none',
+        lineStyle: { type: 'dashed', color: '#b3541e' },
+        label: {
+          formatter: 'timeout',
+          position: 'insideEndTop',
+          color: '#b3541e',
+          fontFamily: 'Space Grotesk'
+        },
+        data: [{ yAxis: Math.min(...timedOutMs) }]
+      };
+    }
 
     return {
       title: {
@@ -185,7 +199,10 @@ export class ScalabilityComponent implements OnInit, OnDestroy {
         formatter: (params: any[]) => {
           let s = `<b>${params[0].axisValue} rows</b><br/>`;
           for (const p of params) {
-            if (p.value != null) s += `${p.marker} ${p.seriesName}: ${p.value}ms<br/>`;
+            if (p.value != null) {
+              const cut = p.data && p.data.timedOut ? ' — TIMEOUT (cut off)' : '';
+              s += `${p.marker} ${p.seriesName}: ${p.value}ms${cut}<br/>`;
+            }
           }
           return s;
         }

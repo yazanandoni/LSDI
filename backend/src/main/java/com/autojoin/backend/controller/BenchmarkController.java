@@ -129,6 +129,6 @@ public class BenchmarkController {
                 summary.transformation(), summary.mismatches(),
                 summary.indexingTimeMs(), summary.learningTimeMs(),
                 summary.joinTimeMs(), summary.fuzzyTimeMs(),
-                summary.method());
+                summary.method(), summary.timedOut());
     }
 }

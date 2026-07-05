@@ -39,4 +39,5 @@ export interface BenchmarkSummaryView {
   joinTimeMs: number;
   fuzzyTimeMs: number;
   method: string;
+  timedOut: boolean;
 }

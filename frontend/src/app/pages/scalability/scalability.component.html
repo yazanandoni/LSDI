@@ -43,7 +43,11 @@
           <td class="mono">{{ s | number }}</td>
           <td class="mono">{{ rowsFor(s, activeMethods[0])?.sourceRows || '' | number }}</td>
           <td *ngFor="let m of activeMethods" class="mono">
-            {{ rowsFor(s, m)?.totalMs || '-' }}ms
+            <ng-container *ngIf="rowsFor(s, m) as r; else noRun">
+              <span *ngIf="!r.timedOut">{{ r.totalMs }}ms</span>
+              <span *ngIf="r.timedOut" class="timeout-cell">⏱ timeout</span>
+            </ng-container>
+            <ng-template #noRun>-</ng-template>
           </td>
         </tr>
       </tbody>
@@ -61,7 +65,7 @@
         <tr *ngFor="let s of sizes">
           <td class="mono">{{ s | number }}</td>
           <td *ngFor="let m of activeMethods" class="mono">
-            <ng-container *ngIf="rowsFor(s, m) as r; else dash">{{ (r.precision | number:'1.2-2') + ' / ' + (r.recall | number:'1.2-2') }}</ng-container>
+            <ng-container *ngIf="rowsFor(s, m) as r; else dash">{{ r.timedOut ? '— / —' : ((r.precision | number:'1.2-2') + ' / ' + (r.recall | number:'1.2-2')) }}</ng-container>
             <ng-template #dash>-</ng-template>
           </td>
         </tr>

@@ -31,6 +31,12 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 @Service
 public class BenchmarkService {
@@ -39,9 +45,30 @@ public class BenchmarkService {
     private final List<BenchmarkFixtureLoader> fixtureLoaders;
     private final AutoJoin autoJoin = new AutoJoin();
 
+    /**
+     * Paper §6.4: "Some existing methods are very slow on large data sets so we
+     * set a timeout at 2 hours." Same mechanism here — SM/FJ-C/FJ-O actually run
+     * and are cut off when the budget expires (the timeout IS the "does not
+     * scale" result: Figure 8 has SM and FJ-O timing out at 10K rows and FJ-C at
+     * 100K). 2h is impractical for an interactive UI, so the budget defaults to
+     * 300s and is configurable via APP_BASELINE_TIMEOUT_SECONDS. AJ runs
+     * without a budget, as in the paper, where it finishes at every size.
+     */
+    private final int baselineTimeoutSeconds;
+
+    /** Runs baseline joins so they can be cancelled; the baselines poll the
+     *  thread's interrupt flag in their hot loops and abort when cut off. */
+    private final ExecutorService baselineExecutor = Executors.newCachedThreadPool(r -> {
+        Thread t = new Thread(r, "baseline-join");
+        t.setDaemon(true);
+        return t;
+    });
+
     public record BenchmarkRunOutcome(BenchmarkSummary summary, String csv, AlgorithmTrace trace) {}
 
-    public BenchmarkService(@Value("${app.data-root:}") String dataRootStr) {
+    public BenchmarkService(@Value("${app.data-root:}") String dataRootStr,
+                            @Value("${app.baseline-timeout-seconds:300}") int baselineTimeoutSeconds) {
+        this.baselineTimeoutSeconds = baselineTimeoutSeconds;
         String root = dataRootStr;
         if (root.isEmpty()) {
             root = Files.exists(Paths.get("autojoin/data")) ? "autojoin" : ".";
@@ -92,9 +119,6 @@ public class BenchmarkService {
         return benchmarks;
     }
 
-    /** SM is O(N²·candidates); cap at 5K as the paper shows it times out at 10K. */
-    private static final int SM_MAX_ROWS = 5_000;
-
     public BenchmarkRunOutcome runBenchmark(String pairId, String method) throws IOException {
         long start = System.currentTimeMillis();
         BenchmarkFixture fixture = loadFixture(pairId);
@@ -112,12 +136,9 @@ public class BenchmarkService {
         List<Row[]> joinedPairs;
         String dirLabel;
         String methodLabel = method != null ? method : "AJ";
+        boolean timedOut = false;
 
-        if ("SM".equals(method) && sourceTable.numRows() > SM_MAX_ROWS) {
-            joinedPairs = List.of();
-            transformDesc = "SM skipped: exceeds " + SM_MAX_ROWS + "-row practical limit";
-            dirLabel = methodLabel + ": source -> target";
-        } else if (method == null || method.equals("AJ")) {
+        if (method == null || method.equals("AJ")) {
             JoinResult result = autoJoin.join(sourceTable, targetTable);
             trace = result.getTrace();
             transformDesc = result.getTransformationDescription();
@@ -128,9 +149,26 @@ public class BenchmarkService {
             JoinMethod baseline = getMethod(method);
             JoinMethod.JoinInput input = new JoinMethod.JoinInput(
                     sourceTable, targetTable, srcKeyCols, tgtKeyCols);
-            joinedPairs = baseline.join(input);
-            transformDesc = method;
-            dirLabel = methodLabel + ": source -> target";
+            Future<List<Row[]>> run = baselineExecutor.submit(() -> baseline.join(input));
+            try {
+                joinedPairs = run.get(baselineTimeoutSeconds, TimeUnit.SECONDS);
+                transformDesc = method;
+            } catch (TimeoutException e) {
+                run.cancel(true);
+                joinedPairs = List.of();
+                timedOut = true;
+                transformDesc = method + " did not finish within " + baselineTimeoutSeconds
+                        + "s and was cut off (paper sec. 6.4 applies a 2h timeout the same way;"
+                        + " these methods grow super-linearly with table size)";
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException("baseline run interrupted", e);
+            } catch (ExecutionException e) {
+                Throwable cause = e.getCause();
+                if (cause instanceof RuntimeException re) throw re;
+                throw new IOException("baseline " + method + " failed", cause);
+            }
+            dirLabel = methodLabel + (timedOut ? ": timed out" : ": source -> target");
         }
 
         long elapsed = System.currentTimeMillis() - start;
@@ -142,8 +180,9 @@ public class BenchmarkService {
         String csv = buildResultCsv(joinedPairs);
         if (joinedPairs == null || joinedPairs.isEmpty()) {
             return new BenchmarkRunOutcome(
-                new BenchmarkSummary(pairId, methodLabel + ": empty", 0, 0, gtMap.size(), 0.0, 0.0, elapsed, null, List.of(),
-                        idxMs, lrnMs, jnMs, fzMs, methodLabel),
+                new BenchmarkSummary(pairId, timedOut ? dirLabel : methodLabel + ": empty",
+                        0, 0, gtMap.size(), 0.0, 0.0, elapsed, transformDesc, List.of(),
+                        idxMs, lrnMs, jnMs, fzMs, methodLabel, timedOut),
                 csv, trace);
         }
 
@@ -171,7 +210,7 @@ public class BenchmarkService {
         return new BenchmarkRunOutcome(
             new BenchmarkSummary(pairId, dirLabel, tp, joinedPairs.size(), gtPairs, precision, recall, elapsed,
                     transformDesc, mismatches,
-                    idxMs, lrnMs, jnMs, fzMs, methodLabel),
+                    idxMs, lrnMs, jnMs, fzMs, methodLabel, false),
             csv, trace);
     }
 

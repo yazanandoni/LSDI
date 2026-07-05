@@ -20,10 +20,15 @@
           <p class="direction">{{ result.direction }}</p>
           <p class="duration">{{ result.durationMs }}ms</p>
         </div>
-        <div class="metrics">
+        <div class="metrics" *ngIf="!result.timedOut; else timeoutBadge">
           <span>P {{ result.precision | number: '1.2-2' }}</span>
           <span>R {{ result.recall | number: '1.2-2' }}</span>
         </div>
+        <ng-template #timeoutBadge>
+          <div class="metrics">
+            <span class="timeout-badge">⏱ TIMEOUT</span>
+          </div>
+        </ng-template>
       </div>
     </div>
 
@@ -33,15 +38,19 @@
           <p class="label">{{ selectedResult.pairId }}</p>
           <h3>{{ selectedResult.direction }}</h3>
           <p class="helper">Transform: {{ selectedResult.transformation || 'n/a' }}</p>
+          <p class="helper timeout-note" *ngIf="selectedResult.timedOut">
+            ⏱ Did not finish within the configured time budget — the paper (§6.4)
+            cuts these methods off the same way; only Auto-Join scales.
+          </p>
         </div>
         <div class="stats">
           <div>
             <span>Precision</span>
-            <strong>{{ selectedResult.precision | number: '1.2-2' }}</strong>
+            <strong>{{ selectedResult.timedOut ? '—' : (selectedResult.precision | number: '1.2-2') }}</strong>
           </div>
           <div>
             <span>Recall</span>
-            <strong>{{ selectedResult.recall | number: '1.2-2' }}</strong>
+            <strong>{{ selectedResult.timedOut ? '—' : (selectedResult.recall | number: '1.2-2') }}</strong>
           </div>
           <div>
             <span>True positives</span>

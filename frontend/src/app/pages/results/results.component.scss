@@ -182,6 +182,21 @@
   font-size: 0.8rem;
 }
 
+.timeout-badge {
+  color: #b3541e;
+  background: rgba(179, 84, 30, 0.12);
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.timeout-note {
+  margin-top: 0.4rem;
+  color: #b3541e;
+}
+
 .empty {
   padding: 2rem;
   text-align: center;

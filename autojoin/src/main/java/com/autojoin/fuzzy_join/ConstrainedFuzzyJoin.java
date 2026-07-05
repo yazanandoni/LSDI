@@ -7,6 +7,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
 
 public class ConstrainedFuzzyJoin {
 
@@ -28,6 +29,16 @@ public class ConstrainedFuzzyJoin {
     }
     private static final double EPSILON = 0.001; // Epsilon for comparison in binary search
     private static final int q = 3; // size of q_gram used for distance calculation
+
+    /**
+     * Cooperative cancellation: the backend runs the FJ-C baseline under a
+     * paper-style timeout (§6.4) and interrupts on expiry. A no-op on threads
+     * that are never interrupted (e.g. Auto-Join's own fuzzy-recovery pass).
+     */
+    private static void checkCancelled() {
+        if (Thread.currentThread().isInterrupted())
+            throw new CancellationException("fuzzy join cancelled (timeout)");
+    }
 
     /**
      * Tokenization scheme for the distance metric. The paper optimizes the fuzzy
@@ -75,6 +86,7 @@ public class ConstrainedFuzzyJoin {
 
         List<FuzzyJoinResult> joinedRows = new ArrayList<>();
         for (int i = 0; i < transformedSourceColumn.size(); i++) {
+            checkCancelled();
             int ci = model.sourceValueIdx[i];
             if (ci < 0) continue;
 
@@ -271,6 +283,7 @@ public class ConstrainedFuzzyJoin {
             // 1:1 or N:1 relationship. Duplicate target key values count per row,
             // so a duplicated key still trips the constraint.
             for (int ci = 0; ci < sourceValues.size(); ci++) {
+                checkCancelled();
                 int matchCount = 0;
                 for (int ki = 0; ki < targetValues.size(); ki++) {
                     if (distance(ci, ki) <= threshold) {
@@ -292,6 +305,7 @@ public class ConstrainedFuzzyJoin {
             // rules (unmatched rows only, single closest match per row).
             if (enforceDistinctSourceConstraint) {
                 for (int ki = 0; ki < targetValues.size(); ki++) {
+                    checkCancelled();
                     int distinctSourceMatches = 0;
                     for (int ci = 0; ci < sourceValues.size(); ci++) {
                         if (distance(ci, ki) <= threshold) {

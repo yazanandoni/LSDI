@@ -49,50 +49,50 @@ export class DblpComponent implements OnInit {
   }
 
   runSelected(): void {
-    const ids: string[] = [];
-    const methods: string[] = [];
+    const runs: { pairId: string; method: string }[] = [];
     for (const id of this.selectedIds) {
       const m = this.methodMap.get(id) || 'AJ';
-      if (m === 'All') {
-        for (const am of this.allMethods) {
-          ids.push(id);
-          methods.push(am);
-        }
-      } else {
-        ids.push(id);
-        methods.push(m);
+      for (const method of m === 'All' ? this.allMethods : [m]) {
+        runs.push({ pairId: id, method });
       }
     }
-    if (ids.length === 0) return;
-    this.running = true;
-    this.statusMessage = `Running ${ids.length} benchmark(s)...`;
-    this.benchmarkService.runBatch(ids, methods).subscribe({
-      next: () => {
-        this.running = false;
-        this.router.navigate(['/results']);
-      },
-      error: (err) => {
-        this.running = false;
-        this.statusMessage = 'Error: ' + (err.message || 'failed to run');
-      }
-    });
+    this.runQueue(runs);
   }
 
   runSingle(pairId: string, method: string): void {
     const methods = method === 'All' ? this.allMethods : [method];
-    const ids = methods.map(() => pairId);
+    this.runQueue(methods.map((m) => ({ pairId, method: m })));
+  }
+
+  // One HTTP request per run, sequentially: a single request holding many
+  // long runs would outlive the browser's ~5 min connection limit, while each
+  // individual run is bounded by the backend's baseline timeout.
+  private runQueue(runs: { pairId: string; method: string }[]): void {
+    if (runs.length === 0) return;
     this.running = true;
-    this.statusMessage = `Running ${pairId} (${method})...`;
-    this.benchmarkService.runBatch(ids, methods).subscribe({
-      next: () => {
+    const failures: string[] = [];
+    let i = 0;
+    const next = () => {
+      if (i >= runs.length) {
         this.running = false;
-        this.router.navigate(['/results']);
-      },
-      error: (err) => {
-        this.running = false;
-        this.statusMessage = 'Error: ' + (err.message || 'failed to run');
+        if (failures.length > 0) {
+          this.statusMessage = `Done with errors (${failures.join('; ')}) — other results saved.`;
+        } else {
+          this.router.navigate(['/results']);
+        }
+        return;
       }
-    });
+      const run = runs[i++];
+      this.statusMessage = `Running ${i}/${runs.length}: ${run.pairId} (${run.method})...`;
+      this.benchmarkService.runBenchmark(run.pairId, run.method).subscribe({
+        next: () => next(),
+        error: (err) => {
+          failures.push(`${run.pairId} ${run.method}: ${err.message || 'failed'}`);
+          next();
+        }
+      });
+    };
+    next();
   }
 
   selectAll(): void {

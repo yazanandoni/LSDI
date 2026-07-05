@@ -10,6 +10,10 @@ services:
     environment:
       - APP_DATA_ROOT=autojoin
       - JAVA_TOOL_OPTIONS=-Xmx8g
+      # Time budget for the SM/FJ-C/FJ-O baselines (paper §6.4 uses a 2h
+      # timeout the same way; AJ is never cut off). Raise to let e.g. FJ-C
+      # fight through larger sizes.
+      - APP_BASELINE_TIMEOUT_SECONDS=300
 
   frontend:
     build:

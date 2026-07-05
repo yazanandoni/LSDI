@@ -17,6 +17,7 @@ public record BenchmarkSummary(
         long learningTimeMs,
         long joinTimeMs,
         long fuzzyTimeMs,
-        String method
+        String method,
+        boolean timedOut
 ) {
 }

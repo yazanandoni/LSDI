@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
 
 /**
  * FJ-O — Fuzzy Join, Oracle (paper §6.2).
@@ -25,6 +26,13 @@ import java.util.Set;
  * across every case), FJ-O is an *oracle* upper bound on fuzzy-join quality,
  * not a usable method. The quality harness drives the grid; {@link #join}
  * exposes a single fixed config so FJ-O can also be timed standalone.
+ *
+ * <p>Note that {@link #join} still pays the FULL 13×4 grid (the eager
+ * precompute in {@link CaseEval}) — deliberately. FJ-O's cost IS the grid
+ * search over configurations; that is why in the paper's Figure 8 FJ-O times
+ * out at 10K rows while the single-configuration FJ-C survives until 100K.
+ * Making this lazy would make FJ-O's timing indistinguishable from FJ-C's and
+ * lose that ordering.
  */
 public final class FuzzyJoinOracle implements JoinMethod {
 
@@ -117,6 +125,10 @@ public final class FuzzyJoinOracle implements JoinMethod {
             int[] idx = new int[ns];
             double[] dst = new double[ns];
             for (int i = 0; i < ns; i++) {
+                // Cooperative cancellation: the backend runs baselines under a
+                // paper-style timeout (§6.4) and interrupts on expiry.
+                if (Thread.currentThread().isInterrupted())
+                    throw new CancellationException("FJ-O cancelled (timeout)");
                 int best = -1;
                 double bestD = Double.MAX_VALUE;
                 Set<String> a = srcTok.get(i);
@@ -150,7 +162,11 @@ public final class FuzzyJoinOracle implements JoinMethod {
 
     private static List<Set<String>> tokenizeAll(List<String> vals, Tok tok) {
         List<Set<String>> out = new ArrayList<>(vals.size());
-        for (String v : vals) out.add(tokenize(v == null ? "" : v, tok));
+        for (String v : vals) {
+            if (Thread.currentThread().isInterrupted())
+                throw new CancellationException("FJ-O cancelled (timeout)");
+            out.add(tokenize(v == null ? "" : v, tok));
+        }
         return out;
     }
 

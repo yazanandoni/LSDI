@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CancellationException;
 
 /**
  * SM — Substring Matching, the schema-translation method of Warren and Tompa
@@ -149,6 +150,10 @@ public final class SubstringMatching implements JoinMethod {
                                     int c, int n, int nt, Kind kind, int k) {
         int count = 0;
         for (int i = 0; i < n; i++) {
+            // Cooperative cancellation: the backend runs baselines under a
+            // paper-style timeout (§6.4) and interrupts on expiry.
+            if (Thread.currentThread().isInterrupted())
+                throw new CancellationException("SM cancelled (timeout)");
             String op = op(src.get(i).get(c), kind, k);
             if (op.length() < MIN_LEN) continue;
             for (int j = 0; j < nt; j++) {
