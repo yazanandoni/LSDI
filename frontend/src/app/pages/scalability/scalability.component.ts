@@ -61,36 +61,21 @@ export class ScalabilityComponent implements OnInit, OnDestroy {
     const methods = this.selectedMethod === 'Compare all'
       ? ['AJ', 'SM', 'FJ-C', 'FJ-O'] : [this.selectedMethod];
 
-    // One HTTP request per run, strictly sequential: parallel runs compete for
-    // CPU and distort the timing curves, and a single batched request would
-    // outlive the browser's connection limit once a baseline hits its budget.
+    // Strictly sequential via the async job API (start + poll): parallel runs
+    // compete for CPU and distort the timing curves, and holding one HTTP
+    // connection per run dies at the browser's connection limit.
     const runs: { pairId: string; method: string }[] = [];
     for (const m of methods) {
       for (const id of pairIds) runs.push({ pairId: id, method: m });
     }
 
     this.running = true;
-    const failures: string[] = [];
-    let i = 0;
-    const next = () => {
-      if (i >= runs.length) {
-        this.running = false;
-        this.statusMessage = failures.length > 0
-          ? `Done with errors: ${failures.join('; ')}` : 'All runs complete.';
-        this.loadResults();
-        return;
-      }
-      const run = runs[i++];
-      this.statusMessage = `Running ${i}/${runs.length}: ${run.pairId} (${run.method})...`;
-      this.benchmarkService.runBenchmark(run.pairId, run.method).subscribe({
-        next: () => next(),
-        error: (err) => {
-          failures.push(`${run.pairId} ${run.method}: ${err.message || 'failed'}`);
-          next();
-        }
-      });
-    };
-    next();
+    this.benchmarkService.runQueue(runs, (msg) => (this.statusMessage = msg)).then((failures) => {
+      this.running = false;
+      this.statusMessage = failures.length > 0
+        ? `Done with errors: ${failures.join('; ')}` : 'All runs complete.';
+      this.loadResults();
+    });
   }
 
   private loadResults(): void {

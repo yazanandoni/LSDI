@@ -64,35 +64,20 @@ export class DblpComponent implements OnInit {
     this.runQueue(methods.map((m) => ({ pairId, method: m })));
   }
 
-  // One HTTP request per run, sequentially: a single request holding many
-  // long runs would outlive the browser's ~5 min connection limit, while each
-  // individual run is bounded by the backend's baseline timeout.
+  // Runs execute sequentially via the async job API (start + poll) so no HTTP
+  // connection is held open for the duration of a run — long runs otherwise
+  // die at the browser's connection limit ("status 0 Unknown Error").
   private runQueue(runs: { pairId: string; method: string }[]): void {
     if (runs.length === 0) return;
     this.running = true;
-    const failures: string[] = [];
-    let i = 0;
-    const next = () => {
-      if (i >= runs.length) {
-        this.running = false;
-        if (failures.length > 0) {
-          this.statusMessage = `Done with errors (${failures.join('; ')}) — other results saved.`;
-        } else {
-          this.router.navigate(['/results']);
-        }
-        return;
+    this.benchmarkService.runQueue(runs, (msg) => (this.statusMessage = msg)).then((failures) => {
+      this.running = false;
+      if (failures.length > 0) {
+        this.statusMessage = `Done with errors (${failures.join('; ')}) — other results saved.`;
+      } else {
+        this.router.navigate(['/results']);
       }
-      const run = runs[i++];
-      this.statusMessage = `Running ${i}/${runs.length}: ${run.pairId} (${run.method})...`;
-      this.benchmarkService.runBenchmark(run.pairId, run.method).subscribe({
-        next: () => next(),
-        error: (err) => {
-          failures.push(`${run.pairId} ${run.method}: ${err.message || 'failed'}`);
-          next();
-        }
-      });
-    };
-    next();
+    });
   }
 
   selectAll(): void {
