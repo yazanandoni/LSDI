@@ -2,7 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { NgFor, NgIf } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { BenchmarkService } from '../../services/benchmark.service';
+import { BenchmarkService, SystemInfo } from '../../services/benchmark.service';
 import { BenchmarkDescriptor } from '../../app.models';
 
 @Component({
@@ -20,6 +20,7 @@ export class DblpComponent implements OnInit {
   methodMap = new Map<string, string>();
   running = false;
   statusMessage = '';
+  systemInfo?: SystemInfo;
 
   constructor(
     private benchmarkService: BenchmarkService,
@@ -30,6 +31,13 @@ export class DblpComponent implements OnInit {
     this.benchmarkService.listBenchmarks().subscribe((benchmarks) => {
       this.benchmarks = benchmarks.filter(b => b.pairId.startsWith('dblp-'));
     });
+    this.benchmarkService.getSystemInfo().subscribe((info) => (this.systemInfo = info));
+  }
+
+  get heapGb(): string {
+    return this.systemInfo
+      ? (this.systemInfo.maxHeapBytes / (1024 * 1024 * 1024)).toFixed(1)
+      : '?';
   }
 
   getMethod(pairId: string): string {

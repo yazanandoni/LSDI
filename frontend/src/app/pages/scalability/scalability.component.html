@@ -10,6 +10,7 @@
     </p>
   </div>
 
+
   <div class="toolbar" *ngIf="dblpBenchmarks.length > 0">
     <div class="toolbar__left">
       <span class="toolbar__count">{{ dblpBenchmarks.length }} DBLP sizes available</span>
@@ -82,4 +83,8 @@
       <p>No DBLP scalability results yet. Select a method and click "Run" to execute the scalability test.</p>
     </div>
   </ng-template>
+
+  <p class="limits-footer" *ngIf="systemInfo">
+    heap: {{ heapGb }} GB · timeout: {{ systemInfo.baselineTimeoutSeconds }}s
+  </p>
 </section>

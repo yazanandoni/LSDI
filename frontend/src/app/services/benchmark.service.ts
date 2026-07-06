@@ -11,8 +11,14 @@ import { AlgorithmTrace } from '../pages/trace/trace.models';
 
 export interface JobStatus {
   status: 'running' | 'done' | 'error';
+  elapsedMs?: string;
   resultId?: string;
   error?: string;
+}
+
+export interface SystemInfo {
+  maxHeapBytes: number;
+  baselineTimeoutSeconds: number;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -43,6 +49,10 @@ export class BenchmarkService {
     return this.http.get<JobStatus>(`${API_BASE_URL}/benchmarks/jobs/${jobId}`);
   }
 
+  getSystemInfo(): Observable<SystemInfo> {
+    return this.http.get<SystemInfo>(`${API_BASE_URL}/system/info`);
+  }
+
   /**
    * Run (pairId, method) pairs strictly sequentially WITHOUT holding an HTTP
    * connection open for the duration of a run: browsers abort requests that
@@ -57,9 +67,15 @@ export class BenchmarkService {
       const run = runs[i];
       const label = `Running ${i + 1}/${runs.length}: ${run.pairId} (${run.method})`;
       onProgress(`${label}...`);
+      // Smooth once-per-second timer; re-anchored to the backend's
+      // authoritative elapsedMs on every poll so it neither skips nor drifts.
+      let anchor = Date.now();
+      const ticker = setInterval(
+        () => onProgress(`${label}... ${Math.max(0, Math.round((Date.now() - anchor) / 1000))}s`),
+        1000);
       try {
         const { jobId } = await firstValueFrom(this.runBenchmarkAsync(run.pairId, run.method));
-        const started = Date.now();
+        anchor = Date.now();
         let pollErrors = 0;
         for (;;) {
           await new Promise((resolve) => setTimeout(resolve, 2500));
@@ -71,12 +87,14 @@ export class BenchmarkService {
             if (++pollErrors >= 5) throw new Error('backend unreachable');
             continue;
           }
+          if (status.elapsedMs != null) anchor = Date.now() - Number(status.elapsedMs);
           if (status.status === 'done') break;
           if (status.status === 'error') throw new Error(status.error || 'run failed');
-          onProgress(`${label}... ${Math.round((Date.now() - started) / 1000)}s`);
         }
       } catch (e) {
         failures.push(`${run.pairId} ${run.method}: ${e instanceof Error ? e.message : 'failed'}`);
+      } finally {
+        clearInterval(ticker);
       }
     }
     return failures;

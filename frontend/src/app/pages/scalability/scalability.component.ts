@@ -2,7 +2,7 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { DecimalPipe, NgFor, NgIf } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { BenchmarkService } from '../../services/benchmark.service';
+import { BenchmarkService, SystemInfo } from '../../services/benchmark.service';
 import { BenchmarkDescriptor } from '../../app.models';
 import * as echarts from 'echarts/core';
 import { LineChart } from 'echarts/charts';
@@ -36,6 +36,7 @@ export class ScalabilityComponent implements OnInit, OnDestroy {
   timingChart?: echarts.ECharts;
   selectedMethod = 'AJ';
   methods = ['AJ', 'SM', 'FJ-C', 'FJ-O', 'Compare all'];
+  systemInfo?: SystemInfo;
 
   constructor(private benchmarkService: BenchmarkService) {}
 
@@ -44,7 +45,14 @@ export class ScalabilityComponent implements OnInit, OnDestroy {
       this.dblpBenchmarks = benchmarks.filter(b => b.pairId.startsWith('dblp-'));
       this.dblpBenchmarks.sort((a, b) => a.sourceRows - b.sourceRows);
     });
+    this.benchmarkService.getSystemInfo().subscribe((info) => (this.systemInfo = info));
     this.loadResults();
+  }
+
+  get heapGb(): string {
+    return this.systemInfo
+      ? (this.systemInfo.maxHeapBytes / (1024 * 1024 * 1024)).toFixed(1)
+      : '?';
   }
 
   ngOnDestroy(): void {

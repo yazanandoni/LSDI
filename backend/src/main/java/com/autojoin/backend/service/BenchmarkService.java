@@ -66,6 +66,10 @@ public class BenchmarkService {
 
     public record BenchmarkRunOutcome(BenchmarkSummary summary, String csv, AlgorithmTrace trace) {}
 
+    public int getBaselineTimeoutSeconds() {
+        return baselineTimeoutSeconds;
+    }
+
     public BenchmarkService(@Value("${app.data-root:}") String dataRootStr,
                             @Value("${app.baseline-timeout-seconds:300}") int baselineTimeoutSeconds) {
         this.baselineTimeoutSeconds = baselineTimeoutSeconds;

@@ -54,6 +54,7 @@ public class BenchmarkController {
     });
 
     private static final class JobState {
+        final long startedMs = System.currentTimeMillis();
         volatile String status = "running";
         volatile String resultId;
         volatile String error;
@@ -110,9 +111,22 @@ public class BenchmarkController {
         if (job == null) return ResponseEntity.notFound().build();
         Map<String, String> body = new HashMap<>();
         body.put("status", job.status);
+        body.put("elapsedMs", String.valueOf(System.currentTimeMillis() - job.startedMs));
         if (job.resultId != null) body.put("resultId", job.resultId);
         if (job.error != null) body.put("error", job.error);
         return ResponseEntity.ok(body);
+    }
+
+    /**
+     * Active runtime limits, so the UI can display what it is running under.
+     * The JVM heap is fixed at process start — changing it means setting
+     * BACKEND_HEAP (docker-compose) and recreating the backend container.
+     */
+    @GetMapping("/system/info")
+    public Map<String, Object> systemInfo() {
+        return Map.of(
+                "maxHeapBytes", Runtime.getRuntime().maxMemory(),
+                "baselineTimeoutSeconds", benchmarkService.getBaselineTimeoutSeconds());
     }
 
     @PostMapping("/benchmarks/run-all")
