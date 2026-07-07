@@ -2,7 +2,9 @@ package com.autojoin.synthesis;
 
 import com.autojoin.AutoJoin;
 import com.autojoin.JoinResult;
+import com.autojoin.baselines.DynamicQGram;
 import com.autojoin.baselines.FuzzyJoinColumn;
+import com.autojoin.baselines.FuzzyJoinFullRow;
 import com.autojoin.baselines.FuzzyJoinOracle;
 import com.autojoin.baselines.JoinMethod;
 import com.autojoin.baselines.SubstringMatching;
@@ -23,10 +25,10 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Quality comparison of Auto-Join against the paper's baselines SM, FJ-C and
- * FJ-O on the Web benchmark — reproduces Figure 5b (average precision/recall per
- * method) on local hardware, so the four methods are compared on identical data
- * and scoring.
+ * Quality comparison of Auto-Join against the paper's §6.2 method set — AJ,
+ * AJ-E, SM, DQ-P, DQ-R, FJ-C, FJ-FR and FJ-O — on the Web benchmark;
+ * reproduces Figure 5b (average precision/recall per method) on local
+ * hardware, so all methods are compared on identical data and scoring.
  *
  * Gated behind {@code -Dcompare=true} because it runs the full Auto-Join
  * pipeline plus a 520-config FJ-O grid over every fixture, which is far heavier
@@ -50,11 +52,14 @@ class MethodComparisonTest {
 
         Map<String, List<Metrics>> byMethod = new LinkedHashMap<>();
         byMethod.put("AJ", new ArrayList<>());
+        byMethod.put("AJ-E", new ArrayList<>());
         List<JoinMethod> baselines = List.of(
-                new SubstringMatching(), new FuzzyJoinColumn());
+                new SubstringMatching(), new DynamicQGram(true), new DynamicQGram(false),
+                new FuzzyJoinColumn(), new FuzzyJoinFullRow());
         for (JoinMethod m : baselines) byMethod.put(m.name(), new ArrayList<>());
 
         AutoJoin autoJoin = new AutoJoin();
+        AutoJoin autoJoinE = new AutoJoin(false); // AJ-E: equality join only, no §5 fuzzy step
         // FJ-O grid: prepare each case once, then pick the single config with the
         // highest average per-case F across all cases (the paper's oracle rule).
         List<FuzzyJoinOracle.CaseEval> oracleEvals = new ArrayList<>(cases.size());
@@ -72,6 +77,10 @@ class MethodComparisonTest {
             JoinResult aj = autoJoin.join(c.source, c.target);
             boolean fwd = BenchmarkTestHelper.isForwardDirection(aj, c.srcKeyCols);
             byMethod.get("AJ").add(c.scorer.scoreRows(aj.getJoinedPairs(), fwd));
+
+            JoinResult ajE = autoJoinE.join(c.source, c.target);
+            boolean fwdE = BenchmarkTestHelper.isForwardDirection(ajE, c.srcKeyCols);
+            byMethod.get("AJ-E").add(c.scorer.scoreRows(ajE.getJoinedPairs(), fwdE));
 
             for (JoinMethod m : baselines) {
                 byMethod.get(m.name()).add(c.scorer.scoreRows(m.join(in), true));

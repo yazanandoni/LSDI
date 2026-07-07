@@ -5,7 +5,9 @@ import com.autojoin.JoinResult;
 import com.autojoin.backend.model.BenchmarkDescriptor;
 import com.autojoin.backend.model.BenchmarkSummary;
 import com.autojoin.backend.model.Mismatch;
+import com.autojoin.baselines.DynamicQGram;
 import com.autojoin.baselines.FuzzyJoinColumn;
+import com.autojoin.baselines.FuzzyJoinFullRow;
 import com.autojoin.baselines.FuzzyJoinOracle;
 import com.autojoin.baselines.JoinMethod;
 import com.autojoin.baselines.SubstringMatching;
@@ -31,6 +33,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -44,6 +47,8 @@ public class BenchmarkService {
     private final List<Path> fixtureRoots;
     private final List<BenchmarkFixtureLoader> fixtureLoaders;
     private final AutoJoin autoJoin = new AutoJoin();
+    /** AJ-E (paper sec. 6.2): Auto-Join with equality join only, no sec. 5 fuzzy step. */
+    private final AutoJoin autoJoinEquiOnly = new AutoJoin(false);
 
     /**
      * Paper §6.4: "Some existing methods are very slow on large data sets so we
@@ -92,6 +97,21 @@ public class BenchmarkService {
         for (Path root : fixtureRoots) {
             System.out.println("  fixture root: " + root + " exists=" + Files.exists(root));
         }
+        // Warm the CSV row-count cache so the first /api/benchmarks call is
+        // instant — counting rows means scanning every fixture CSV once, and
+        // the large DBLP files make a cold scan take seconds.
+        Thread warmer = new Thread(() -> {
+            try {
+                long t0 = System.currentTimeMillis();
+                int n = listBenchmarks().size();
+                System.out.println("BenchmarkService: warmed row-count cache for " + n
+                        + " fixtures in " + (System.currentTimeMillis() - t0) + "ms");
+            } catch (Exception e) {
+                System.err.println("BenchmarkService: cache warm-up failed: " + e.getMessage());
+            }
+        }, "benchmark-cache-warmer");
+        warmer.setDaemon(true);
+        warmer.start();
     }
 
     public List<BenchmarkDescriptor> listBenchmarks() throws IOException {
@@ -108,8 +128,8 @@ public class BenchmarkService {
                     if (pairId.startsWith("_") || !seen.add(pairId)) continue;
                     BenchmarkFixture fixture = loader.loadFixture(pairId);
                     try {
-                        int[] srcInfo = countCsvRowsAndColumns(resolvePath(fixture.source.file));
-                        int[] tgtInfo = countCsvRowsAndColumns(resolvePath(fixture.target.file));
+                        int[] srcInfo = countCsvRowsAndColumnsCached(resolvePath(fixture.source.file));
+                        int[] tgtInfo = countCsvRowsAndColumnsCached(resolvePath(fixture.target.file));
                         benchmarks.add(new BenchmarkDescriptor(pairId,
                                 srcInfo[0], srcInfo[1],
                                 tgtInfo[0], tgtInfo[1],
@@ -124,6 +144,17 @@ public class BenchmarkService {
     }
 
     public BenchmarkRunOutcome runBenchmark(String pairId, String method) throws IOException {
+        // Paper sec. 6.2: FJ-O is an ORACLE — it picks the configuration with the
+        // highest average F across ALL web cases, using the ground truth. Resolve
+        // (and cache) that global config before the timer starts, so the one-time
+        // oracle search does not distort this run's measured time. DBLP runs keep
+        // the fixed-config standalone join: there FJ-O is only timed (sec. 6.4)
+        // and the config choice does not change the grid cost.
+        FuzzyJoinOracle.Config fjoConfig = null;
+        if ("FJ-O".equals(method) && !pairId.startsWith("dblp-")) {
+            fjoConfig = oracleConfig();
+        }
+
         long start = System.currentTimeMillis();
         BenchmarkFixture fixture = loadFixture(pairId);
         Table sourceTable = loadTable(fixture.source.file, fixture.source.key_columns);
@@ -141,16 +172,20 @@ public class BenchmarkService {
         String dirLabel;
         String methodLabel = method != null ? method : "AJ";
         boolean timedOut = false;
+        // AJ and AJ-E are the paper's own method (AJ-E = equality join only, no
+        // sec. 5 fuzzy step) — both run untimed with a full trace, like AJ always has.
+        boolean isAutoJoin = methodLabel.equals("AJ") || methodLabel.equals("AJ-E");
 
-        if (method == null || method.equals("AJ")) {
-            JoinResult result = autoJoin.join(sourceTable, targetTable);
+        if (isAutoJoin) {
+            AutoJoin aj = methodLabel.equals("AJ-E") ? autoJoinEquiOnly : autoJoin;
+            JoinResult result = aj.join(sourceTable, targetTable);
             trace = result.getTrace();
             transformDesc = result.getTransformationDescription();
             joinedPairs = result.getJoinedPairs();
             dirLabel = methodLabel + ": " + (!result.isEmpty() && isForwardDirection(result, srcKeyCols)
                     ? "source -> target" : "target -> source");
         } else {
-            JoinMethod baseline = getMethod(method);
+            JoinMethod baseline = fjoConfig != null ? oracleAt(fjoConfig) : getMethod(method);
             JoinMethod.JoinInput input = new JoinMethod.JoinInput(
                     sourceTable, targetTable, srcKeyCols, tgtKeyCols);
             Future<List<Row[]>> run = baselineExecutor.submit(() -> baseline.join(input));
@@ -190,15 +225,21 @@ public class BenchmarkService {
                 csv, trace);
         }
 
+        // Set-based scoring per the paper (sec. 6.1): a produced pair is its
+        // (srcKey, tgtKey) fingerprint, deduped so a method emitting the same
+        // pair twice cannot double-count a true positive (recall > 1) or a
+        // mismatch. Mirrors the MethodComparisonTest scorer.
         int tp = 0;
         List<Mismatch> mismatches = new ArrayList<>();
-        boolean forward = !method.equals("AJ") || isForwardDirection(
+        Set<String> produced = new LinkedHashSet<>();
+        boolean forward = !isAutoJoin || isForwardDirection(
                 JoinResult.of(joinedPairs, transformDesc), srcKeyCols);
         for (Row[] pair : joinedPairs) {
             Row srcRow = forward ? pair[0] : pair[1];
             Row tgtRow = forward ? pair[1] : pair[0];
             String srcFp = positionalFingerprint(srcRow, srcKeyCols, "|");
             String tgtFp = positionalFingerprint(tgtRow, tgtKeyCols, " | ");
+            if (!produced.add(srcFp + "\t\t" + tgtFp)) continue; // duplicate pair
             List<String> expected = gtMap.get(srcFp);
             if (expected != null && tgtFp.equals(String.join(" | ", expected))) {
                 tp++;
@@ -208,11 +249,11 @@ public class BenchmarkService {
         }
 
         int gtPairs = gtMap.size();
-        double precision = gtPairs == 0 ? 0.0 : (double) tp / joinedPairs.size();
+        double precision = gtPairs == 0 ? 0.0 : (double) tp / produced.size();
         double recall = gtPairs == 0 ? 0.0 : (double) tp / gtPairs;
 
         return new BenchmarkRunOutcome(
-            new BenchmarkSummary(pairId, dirLabel, tp, joinedPairs.size(), gtPairs, precision, recall, elapsed,
+            new BenchmarkSummary(pairId, dirLabel, tp, produced.size(), gtPairs, precision, recall, elapsed,
                     transformDesc, mismatches,
                     idxMs, lrnMs, jnMs, fzMs, methodLabel, false),
             csv, trace);
@@ -235,11 +276,97 @@ public class BenchmarkService {
         return outcomes;
     }
 
+    /** Cached FJ-O oracle config; computed once from all web-benchmark cases. */
+    private volatile FuzzyJoinOracle.Config fjoOracleConfig;
+
+    /**
+     * The paper's FJ-O oracle rule (sec. 6.2): evaluate all 520 configurations
+     * on every web-benchmark case and "report the best configuration that has
+     * the highest average F-score across all cases" — chosen with the ground
+     * truth, which is exactly why FJ-O is an upper bound and not a usable
+     * method. Runs once (a minute or two) and is cached for the process life.
+     */
+    private synchronized FuzzyJoinOracle.Config oracleConfig() throws IOException {
+        if (fjoOracleConfig != null) return fjoOracleConfig;
+        long t0 = System.currentTimeMillis();
+
+        List<FuzzyJoinOracle.CaseEval> evals = new ArrayList<>();
+        List<List<String>> srcKeys = new ArrayList<>();
+        List<List<String>> tgtKeys = new ArrayList<>();
+        List<Map<String, List<String>>> gts = new ArrayList<>();
+        for (BenchmarkDescriptor d : listBenchmarks()) {
+            if (d.pairId().startsWith("dblp-")) continue;
+            BenchmarkFixture fx = loadFixture(d.pairId());
+            Map<String, List<String>> gt = loadGroundTruth(
+                    resolvePath(fx.ground_truth.file), fx.ground_truth.source_key_columns.size());
+            if (gt.isEmpty()) continue;
+            Table src = loadTable(fx.source.file, fx.source.key_columns);
+            Table tgt = loadTable(fx.target.file, fx.target.key_columns);
+            evals.add(FuzzyJoinOracle.prepare(new JoinMethod.JoinInput(
+                    src, tgt, fx.source.key_columns, fx.target.key_columns)));
+            srcKeys.add(fx.source.key_columns);
+            tgtKeys.add(fx.target.key_columns);
+            gts.add(gt);
+        }
+
+        FuzzyJoinOracle.Config best = null;
+        double bestF = -1;
+        for (FuzzyJoinOracle.Config cfg : FuzzyJoinOracle.grid()) {
+            double sumF = 0;
+            for (int i = 0; i < evals.size(); i++) {
+                sumF += fScore(evals.get(i).pairsAt(cfg), srcKeys.get(i), tgtKeys.get(i), gts.get(i));
+            }
+            double avgF = evals.isEmpty() ? 0 : sumF / evals.size();
+            if (avgF > bestF) {
+                bestF = avgF;
+                best = cfg;
+            }
+        }
+        fjoOracleConfig = best != null
+                ? best
+                : new FuzzyJoinOracle.Config(FuzzyJoinOracle.Tok.WORD, FuzzyJoinOracle.Dist.JACCARD, 0.5);
+        System.out.println("FJ-O oracle config: " + fjoOracleConfig.label()
+                + String.format(java.util.Locale.US, " (avg F %.3f over %d web cases, chosen in %dms)",
+                        bestF, evals.size(), System.currentTimeMillis() - t0));
+        return fjoOracleConfig;
+    }
+
+    /** FJ-O pinned to the oracle-chosen configuration (still pays the full grid). */
+    private static JoinMethod oracleAt(FuzzyJoinOracle.Config cfg) {
+        return new JoinMethod() {
+            @Override public String name() { return "FJ-O"; }
+            @Override public List<Row[]> join(JoinInput in) {
+                return FuzzyJoinOracle.prepare(in).pairsAt(cfg);
+            }
+        };
+    }
+
+    /** Set-based F-score of produced pairs vs ground truth (paper sec. 6.1). */
+    private double fScore(List<Row[]> pairs, List<String> srcKeyCols,
+                          List<String> tgtKeyCols, Map<String, List<String>> gtMap) {
+        Set<String> produced = new LinkedHashSet<>();
+        int tp = 0;
+        for (Row[] pair : pairs) {
+            String srcFp = positionalFingerprint(pair[0], srcKeyCols, "|");
+            String tgtFp = positionalFingerprint(pair[1], tgtKeyCols, " | ");
+            if (!produced.add(srcFp + "\t\t" + tgtFp)) continue;
+            List<String> expected = gtMap.get(srcFp);
+            if (expected != null && tgtFp.equals(String.join(" | ", expected))) tp++;
+        }
+        if (produced.isEmpty() || gtMap.isEmpty()) return 0;
+        double p = (double) tp / produced.size();
+        double r = (double) tp / gtMap.size();
+        return (p + r) == 0 ? 0 : 2 * p * r / (p + r);
+    }
+
     private JoinMethod getMethod(String name) {
         return switch (name) {
             case "SM" -> new SubstringMatching();
             case "FJ-C" -> new FuzzyJoinColumn();
+            case "FJ-FR" -> new FuzzyJoinFullRow();
             case "FJ-O" -> new FuzzyJoinOracle();
+            case "DQ-P" -> new DynamicQGram(true);
+            case "DQ-R" -> new DynamicQGram(false);
             default -> throw new IllegalArgumentException("Unknown method: " + name);
         };
     }
@@ -282,6 +409,24 @@ public class BenchmarkService {
 
     private Path resolvePath(String relativePath) {
         return dataRoot.resolve(relativePath);
+    }
+
+    /** Cached row/column counts, validated by file size + mtime so the counts
+     *  survive fixture regeneration but big CSVs are only ever scanned once. */
+    private record CsvStats(long size, long mtime, int rows, int cols) {}
+    private final Map<Path, CsvStats> csvStatsCache = new ConcurrentHashMap<>();
+
+    private int[] countCsvRowsAndColumnsCached(Path csvPath) throws IOException {
+        Path abs = csvPath.toAbsolutePath().normalize();
+        long size = Files.size(abs);
+        long mtime = Files.getLastModifiedTime(abs).toMillis();
+        CsvStats cached = csvStatsCache.get(abs);
+        if (cached == null || cached.size() != size || cached.mtime() != mtime) {
+            int[] counted = countCsvRowsAndColumns(abs);
+            cached = new CsvStats(size, mtime, counted[0], counted[1]);
+            csvStatsCache.put(abs, cached);
+        }
+        return new int[]{cached.rows(), cached.cols()};
     }
 
     /**

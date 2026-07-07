@@ -26,6 +26,9 @@
   </div>
 
   <div class="card timing-chart" *ngIf="hasResults">
+    <div class="chart-actions">
+      <button class="btn btn--ghost-sm" (click)="downloadChart()">&#10515; Download PNG</button>
+    </div>
     <div id="timingChart" class="chart__canvas"></div>
   </div>
 

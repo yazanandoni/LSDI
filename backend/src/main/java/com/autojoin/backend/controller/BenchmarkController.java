@@ -15,6 +15,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -189,6 +190,13 @@ public class BenchmarkController {
         return resultStore.getTrace(id)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /** Erase all stored runs (the store is in-memory; a restart does the same). */
+    @DeleteMapping("/results")
+    public ResponseEntity<Void> clearResults() {
+        resultStore.clear();
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/results")

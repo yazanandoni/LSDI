@@ -104,6 +104,10 @@ export class BenchmarkService {
     return this.http.get<BenchmarkSummaryView[]>(`${API_BASE_URL}/results`);
   }
 
+  clearResults(): Observable<void> {
+    return this.http.delete<void>(`${API_BASE_URL}/results`);
+  }
+
   getResult(id: string): Observable<BenchmarkSummaryView> {
     return this.http.get<BenchmarkSummaryView>(`${API_BASE_URL}/results/${id}`);
   }

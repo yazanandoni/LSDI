@@ -74,7 +74,14 @@ public final class FuzzyJoinOracle implements JoinMethod {
     @Override
     public String name() { return "FJ-O"; }
 
-    /** Standalone/timing use: a single representative config (word/Jaccard/0.5). */
+    /**
+     * Standalone/timing use only: a single representative config
+     * (word/Jaccard/0.5). This is NOT the oracle — quality comparisons must
+     * drive the grid via {@link #prepare} and pick the config with the ground
+     * truth (the backend's BenchmarkService and MethodComparisonTest both do);
+     * this entry point exists for the DBLP scalability runs, where FJ-O is
+     * only timed and the config choice does not change the grid cost.
+     */
     @Override
     public List<Row[]> join(JoinInput in) {
         return prepare(in).pairsAt(new Config(Tok.WORD, Dist.JACCARD, 0.5));

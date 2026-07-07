@@ -51,6 +51,25 @@ public class AutoJoin {
     private final TransformationLearner learner = new TransformationLearner();
 
     /**
+     * Whether the sec. 5 fuzzy join runs at all (both the recovery of rows the
+     * equi-join leaves unmatched and the fuzzy-only fallback when no transform
+     * is learned). Disabling it yields the paper's sec. 6.2 baseline
+     * "Auto-Join - Equality (AJ-E)": equality join on the learned
+     * transformation only. On the Web benchmark the paper measures AJ-E at
+     * precision 0.9758 / recall 0.7757 vs AJ's 0.9504 / 0.8840 - the fuzzy
+     * step trades ~0.025 precision for ~0.11 recall.
+     */
+    private final boolean fuzzyJoinEnabled;
+
+    public AutoJoin() {
+        this(true);
+    }
+
+    public AutoJoin(boolean fuzzyJoinEnabled) {
+        this.fuzzyJoinEnabled = fuzzyJoinEnabled;
+    }
+
+    /**
      * Largest table (by rows) for which the §3.3 composite-key split retry is
      * attempted. The retry doubles discovery+learning cost, so on big tables it
      * breaks the paper's interactive-speed goal; the composite-key scenarios
@@ -446,7 +465,7 @@ public class AutoJoin {
 
         long t1L = System.nanoTime();
         LearnedTransformation learned = learner.learn(matches, sourceSample, targetSample);
-        long learningMs = (t1L - t1) / 1_000_000;
+        long learningMs = (System.nanoTime() - t1L) / 1_000_000;
         if (debug) System.err.printf("  [learn] total %dms%n", (System.nanoTime() - t1) / 1_000_000);
 
         if (learned == null) {
@@ -454,6 +473,7 @@ public class AutoJoin {
             // fall back to a constrained fuzzy join on the raw best-evidence
             // column pair (paper §5 as the recovery net for cases like
             // "duke cs profs", where the join is a token reorder).
+            if (!fuzzyJoinEnabled) return DirectionResult.empty(); // AJ-E: no §5 at all
             DirectionResult fuzzyOnly = fuzzyOnlyDirection(matches, sourceTable, targetTable);
             if (debug) System.err.printf("  [fuzzy-only] %d pairs (no transform learned)%n",
                     fuzzyOnly.join.size());
@@ -475,9 +495,11 @@ public class AutoJoin {
                 joinedPairs, learned, sourceTable);
 
                 // Phase 4 (paper §5): constrained fuzzy join recovery of the rows the
-        // strict equi-join left unmatched.
+        // strict equi-join left unmatched. Skipped entirely for AJ-E.
         long t3 = System.nanoTime();
-        FuzzyRecoveryResult fuzzyResult = fuzzyRecover(learned, sourceTable, targetTable);
+        FuzzyRecoveryResult fuzzyResult = fuzzyJoinEnabled
+                ? fuzzyRecover(learned, sourceTable, targetTable)
+                : new FuzzyRecoveryResult(List.of(), List.of(), 0.0, 0);
         long fuzzyMs = (System.nanoTime() - t3) / 1_000_000;
         List<Row[]> allPairs = joinedPairs;
         int unmatchedBefore = fuzzyResult.unmatchedBeforeFuzzy();
