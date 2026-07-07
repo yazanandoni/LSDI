@@ -1,0 +1,29 @@
+{
+  "pair_id": "dblp-10000",
+  "source": {
+    "file": "data/raw/dblp-scalability/10000/source.csv",
+    "key_columns": [
+      "authors",
+      "title",
+      "year"
+    ]
+  },
+  "target": {
+    "file": "data/raw/dblp-scalability/10000/target.csv",
+    "key_columns": [
+      "record"
+    ]
+  },
+  "ground_truth": {
+    "file": "data/raw/dblp-scalability/10000/ground_truth.csv",
+    "format": "row_values",
+    "source_key_columns": [
+      "authors",
+      "title",
+      "year"
+    ],
+    "target_key_columns": [
+      "record"
+    ]
+  }
+}

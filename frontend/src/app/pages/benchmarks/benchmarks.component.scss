@@ -114,6 +114,25 @@
   font-size: 0.8rem;
 }
 
+.col-method {
+  width: 90px;
+}
+
+.method-select {
+  padding: 0.25rem 0.4rem;
+  border-radius: 6px;
+  border: 1px solid rgba(15, 76, 92, 0.25);
+  background: white;
+  font-family: "Space Mono", monospace;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.method-select:focus {
+  outline: none;
+  border-color: var(--ocean-500);
+}
+
 .col-action {
   width: 80px;
   text-align: right;

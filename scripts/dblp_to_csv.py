@@ -13,14 +13,22 @@ a clean 1:1 (high join-participation), for several N.
 
 Streaming (lxml.iterparse) keeps memory bounded on the ~4 GB uncompressed XML.
 
-Usage (run from the directory that holds dblp.dtd so the DTD entities resolve):
-    python dblp_to_csv.py dblp.xml.gz OUTDIR --n 100 1000 10000 100000 1000000
+Usage:
+    python dblp_to_csv.py dblp.xml.gz OUTDIR [--n 100 1000 ...]
+                                           [--sep " | "]
+                                           [--fixtures-dir FIXDIR]
+
+    OUTDIR receives <N>/source.csv, <N>/target.csv, <N>/ground_truth.csv
+    FIXDIR receives <N>/fixture.json  (web-benchmark fixture metadata)
+
+    Run from the directory that holds dblp.dtd so the DTD entities resolve.
 
 Requires: pip install lxml
 """
 import argparse
 import csv
 import gzip
+import json
 import os
 import sys
 
@@ -64,20 +72,51 @@ def records(path):
         stream.close()
 
 
+def write_fixture(fixtures_dir, size, outdir_name, sep):
+    """Write fixture.json for a given size, matching the web-benchmark schema."""
+    pair_id = f"dblp-{size}"
+    fixture = {
+        "pair_id": pair_id,
+        "source": {
+            "file": f"data/raw/{outdir_name}/{size}/source.csv",
+            "key_columns": ["authors", "title", "year"]
+        },
+        "target": {
+            "file": f"data/raw/{outdir_name}/{size}/target.csv",
+            "key_columns": ["record"]
+        },
+        "ground_truth": {
+            "file": f"data/raw/{outdir_name}/{size}/ground_truth.csv",
+            "format": "row_values",
+            "source_key_columns": ["authors", "title", "year"],
+            "target_key_columns": ["record"]
+        }
+    }
+    d = os.path.join(fixtures_dir, pair_id)
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "fixture.json"), "w", encoding="utf-8") as f:
+        json.dump(fixture, f, indent=2)
+        f.write("\n")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("dblp", help="path to dblp.xml or dblp.xml.gz")
-    ap.add_argument("outdir", help="directory to write dblp_<N>/{source,target}.csv into")
+    ap.add_argument("outdir", help="directory to write <N>/{source,target,ground_truth}.csv into")
     ap.add_argument("--n", type=int, nargs="+",
                     default=[100, 1000, 10000, 100000, 1000000],
                     help="table sizes to emit")
     ap.add_argument("--sep", default=" | ",
                     help="separator used to concatenate the target column")
+    ap.add_argument("--fixtures-dir",
+                    help="if set, write fixture.json (web-benchmark format) into this directory")
     args = ap.parse_args()
 
     os.makedirs(args.outdir, exist_ok=True)
     largest = max(args.n)
+
+    outdir_name = os.path.basename(os.path.normpath(os.path.abspath(args.outdir)))
 
     rows = []
     for rec in records(args.dblp):
@@ -91,17 +130,36 @@ def main():
             print(f"skipping N={n:,} (only {len(rows):,} records available)")
             continue
         sub = rows[:n]
-        d = os.path.join(args.outdir, f"dblp_{n}")
+        d = os.path.join(args.outdir, str(n))
         os.makedirs(d, exist_ok=True)
-        with open(os.path.join(d, "source.csv"), "w", newline="", encoding="utf-8") as f:
+
+        # source.csv — three columns
+        src_path = os.path.join(d, "source.csv")
+        with open(src_path, "w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
             w.writerow(["authors", "title", "year"])
             w.writerows(sub)
-        with open(os.path.join(d, "target.csv"), "w", newline="", encoding="utf-8") as f:
+
+        # target.csv — single concatenated column
+        tgt_path = os.path.join(d, "target.csv")
+        with open(tgt_path, "w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
             w.writerow(["record"])
             for authors, title, year in sub:
                 w.writerow([f"{authors}{args.sep}{title}{args.sep}{year}"])
+
+        # ground_truth.csv — source key columns followed by target key column
+        gt_path = os.path.join(d, "ground_truth.csv")
+        with open(gt_path, "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["authors", "title", "year", "record"])
+            for authors, title, year in sub:
+                w.writerow([authors, title, year,
+                           f"{authors}{args.sep}{title}{args.sep}{year}"])
+
+        if args.fixtures_dir:
+            write_fixture(args.fixtures_dir, n, outdir_name, args.sep)
+
         print(f"wrote {n:,} rows -> {d}")
 
 

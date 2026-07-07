@@ -9,7 +9,16 @@ services:
       - ./autojoin/data:/app/autojoin/data
     environment:
       - APP_DATA_ROOT=autojoin
-      - JAVA_OPTS=-Xms256m -Xmx512m
+      # JVM max heap — fixed at process start, so changing it requires
+      # recreating the container: set BACKEND_HEAP in a .env file next to this
+      # compose file (BACKEND_HEAP=32g) or inline
+      # (BACKEND_HEAP=32g docker compose up -d backend). The UI shows the
+      # active value on the DBLP/Scalability pages.
+      - JAVA_TOOL_OPTIONS=-Xmx${BACKEND_HEAP:-8g}
+      # Time budget for the SM/FJ-C/FJ-O baselines (paper §6.4 uses a 2h
+      # timeout the same way; AJ is never cut off). Raise to let e.g. FJ-C
+      # fight through larger sizes.
+      - APP_BASELINE_TIMEOUT_SECONDS=300
 
   frontend:
     build:

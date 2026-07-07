@@ -51,6 +51,13 @@ public class BenchmarkResultStore {
         return Optional.ofNullable(traces.get(id));
     }
 
+    /** Erase every stored run (summaries, CSVs and traces). */
+    public void clear() {
+        results.clear();
+        resultCsvs.clear();
+        traces.clear();
+    }
+
     public List<StoredResult> list() {
         List<StoredResult> stored = results.entrySet().stream()
                 .map(entry -> new StoredResult(entry.getKey(), entry.getValue()))

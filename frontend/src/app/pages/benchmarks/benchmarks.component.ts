@@ -1,19 +1,25 @@
 import { Component, OnInit } from '@angular/core';
 import { NgFor, NgIf } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
+import { FormsModule } from '@angular/forms';
 import { BenchmarkService } from '../../services/benchmark.service';
 import { BenchmarkDescriptor } from '../../app.models';
 
 @Component({
   selector: 'app-benchmarks',
   standalone: true,
-  imports: [RouterLink, NgFor, NgIf],
+  imports: [RouterLink, NgFor, NgIf, FormsModule],
   templateUrl: './benchmarks.component.html',
   styleUrl: './benchmarks.component.scss'
 })
 export class BenchmarksComponent implements OnInit {
   benchmarks: BenchmarkDescriptor[] = [];
+  // The paper's full §6.2 method set is runnable on the Web benchmark
+  // (the DBLP pages only expose the §6.4 scalability subset AJ/SM/FJ-C/FJ-O).
+  allMethods = ['AJ', 'AJ-E', 'SM', 'DQ-P', 'DQ-R', 'FJ-C', 'FJ-FR', 'FJ-O'];
+  methods = [...this.allMethods, 'All'];
   selectedIds = new Set<string>();
+  methodMap = new Map<string, string>();
   running = false;
   statusMessage = '';
 
@@ -24,8 +30,16 @@ export class BenchmarksComponent implements OnInit {
 
   ngOnInit(): void {
     this.benchmarkService.listBenchmarks().subscribe((benchmarks) => {
-      this.benchmarks = benchmarks;
+      this.benchmarks = benchmarks.filter(b => !b.pairId.startsWith('dblp-'));
     });
+  }
+
+  getMethod(pairId: string): string {
+    return this.methodMap.get(pairId) || 'AJ';
+  }
+
+  setMethod(pairId: string, method: string): void {
+    this.methodMap.set(pairId, method);
   }
 
   toggleSelection(pairId: string): void {
@@ -36,34 +50,45 @@ export class BenchmarksComponent implements OnInit {
     }
   }
 
-  runSelected(): void {
-    const ids = Array.from(this.selectedIds);
-    if (ids.length === 0) return;
-    this.running = true;
-    this.statusMessage = `Running ${ids.length} benchmark(s)...`;
-    this.benchmarkService.runBatch(ids).subscribe({
-      next: () => {
-        this.running = false;
-        this.router.navigate(['/results']);
-      },
-      error: (err) => {
-        this.running = false;
-        this.statusMessage = 'Error: ' + (err.message || 'failed to run');
+  runAllMethods(): void {
+    const runs: { pairId: string; method: string }[] = [];
+    for (const b of this.benchmarks) {
+      for (const m of this.allMethods) {
+        runs.push({ pairId: b.pairId, method: m });
       }
-    });
+    }
+    this.runQueue(runs);
   }
 
-  runSingle(pairId: string): void {
+  runSelected(): void {
+    const runs: { pairId: string; method: string }[] = [];
+    for (const id of this.selectedIds) {
+      const m = this.methodMap.get(id) || 'AJ';
+      for (const method of m === 'All' ? this.allMethods : [m]) {
+        runs.push({ pairId: id, method });
+      }
+    }
+    this.runQueue(runs);
+  }
+
+  runSingle(pairId: string, method: string): void {
+    const methods = method === 'All' ? this.allMethods : [method];
+    this.runQueue(methods.map((m) => ({ pairId, method: m })));
+  }
+
+  // Runs execute sequentially via the async job API (start + poll) so no HTTP
+  // connection is held open for the duration of a run — a long queue (e.g. the
+  // FJ-O grid over every pair) otherwise dies at the browser's connection
+  // limit ("status 0 Unknown Error").
+  private runQueue(runs: { pairId: string; method: string }[]): void {
+    if (runs.length === 0) return;
     this.running = true;
-    this.statusMessage = `Running ${pairId}...`;
-    this.benchmarkService.runBenchmark(pairId).subscribe({
-      next: () => {
-        this.running = false;
+    this.benchmarkService.runQueue(runs, (msg) => (this.statusMessage = msg)).then((failures) => {
+      this.running = false;
+      if (failures.length > 0) {
+        this.statusMessage = `Done with errors (${failures.join('; ')}) — other results saved.`;
+      } else {
         this.router.navigate(['/results']);
-      },
-      error: (err) => {
-        this.running = false;
-        this.statusMessage = 'Error: ' + (err.message || 'failed to run');
       }
     });
   }

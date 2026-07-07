@@ -3,6 +3,10 @@ export interface AlgorithmTrace {
   forwardTrace: DirectionTrace;
   backwardTrace: DirectionTrace;
   inputTables: InputTablesTrace;
+  discoveryMs: number;
+  learningMs: number;
+  joinMs: number;
+  fuzzyMs: number;
 }
 
 export interface InputTablesTrace {
@@ -103,6 +107,7 @@ export interface FuzzyTrace {
   unmatchedBeforeFuzzy: number;
   remainingUnmatched: number;
   sampleRecovered: FuzzyRecoveryMatch[];
+  skipped: boolean;
 }
 
 export interface FuzzyRecoveryMatch {

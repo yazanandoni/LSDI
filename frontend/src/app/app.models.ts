@@ -34,4 +34,10 @@ export interface BenchmarkSummaryView {
   durationMs: number;
   transformation: string | null;
   mismatches: Mismatch[];
+  indexingTimeMs: number;
+  learningTimeMs: number;
+  joinTimeMs: number;
+  fuzzyTimeMs: number;
+  method: string;
+  timedOut: boolean;
 }

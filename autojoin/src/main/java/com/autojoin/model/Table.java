@@ -13,6 +13,11 @@ public class Table {
 
     private final String name;
     private final List<Column> columns;
+    // One immutable column-name list, shared by every Row this table hands out
+    // (see getRow). Previously each getRow re-derived it via a stream and Row
+    // then copied it again — for a million-row scan that is a million redundant
+    // list allocations of identical content.
+    private final List<String> columnNames;
 
     public Table(String name, List<Column> columns) {
         if (columns.isEmpty()) {
@@ -28,6 +33,9 @@ public class Table {
         }
         this.name = name;
         this.columns = Collections.unmodifiableList(new ArrayList<>(columns));
+        List<String> names = new ArrayList<>(this.columns.size());
+        for (Column col : this.columns) names.add(col.getName());
+        this.columnNames = Collections.unmodifiableList(names);
     }
 
     public String getName() { return name; }
@@ -46,9 +54,11 @@ public class Table {
     }
 
     public Row getRow(int index) {
-        List<String> colNames = columns.stream().map(Column::getName).collect(Collectors.toList());
-        List<String> values = columns.stream().map(c -> c.getValue(index)).collect(Collectors.toList());
-        return new Row(colNames, values);
+        List<String> values = new ArrayList<>(columns.size());
+        for (Column c : columns) values.add(c.getValue(index));
+        // Share the table-wide column-name list; the fresh values list is only
+        // referenced by this Row, so it is safe to hand over without a copy.
+        return Row.trusting(columnNames, Collections.unmodifiableList(values));
     }
 
     public List<Row> getRows() {

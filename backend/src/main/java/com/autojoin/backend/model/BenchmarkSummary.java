@@ -12,6 +12,12 @@ public record BenchmarkSummary(
         double recall,
         long durationMs,
         String transformation,
-        List<Mismatch> mismatches
+        List<Mismatch> mismatches,
+        long indexingTimeMs,
+        long learningTimeMs,
+        long joinTimeMs,
+        long fuzzyTimeMs,
+        String method,
+        boolean timedOut
 ) {
 }

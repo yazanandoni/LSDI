@@ -3,7 +3,13 @@ import { DecimalPipe, NgFor, NgIf, SlicePipe } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { BenchmarkService } from '../../services/benchmark.service';
 import { BenchmarkSummaryView } from '../../app.models';
-import { buildMatchBreakdownOption, buildPrecisionRecallOption } from './results-charts';
+import { API_BASE_URL } from '../../core/api.config';
+import {
+  MethodAverage,
+  buildMatchBreakdownOption,
+  buildMethodAverageOption,
+  buildPrecisionRecallOption
+} from './results-charts';
 import * as echarts from 'echarts/core';
 
 @Component({
@@ -14,10 +20,13 @@ import * as echarts from 'echarts/core';
   styleUrl: './results.component.scss'
 })
 export class ResultsComponent implements OnInit, OnDestroy {
+  readonly apiBase = API_BASE_URL;
   results: BenchmarkSummaryView[] = [];
   selectedResult: BenchmarkSummaryView | null = null;
+  methodAverages: MethodAverage[] = [];
   precisionRecallChart?: echarts.ECharts;
   matchBreakdownChart?: echarts.ECharts;
+  methodAverageChart?: echarts.ECharts;
 
   constructor(
     private benchmarkService: BenchmarkService,
@@ -25,17 +34,36 @@ export class ResultsComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    this.benchmarkService.listResults().subscribe((results) => {
-      this.results = results;
-      this.selectedResult = results[0] ?? null;
-      this.updateCharts();
-      this.syncHeights();
-    });
+    this.loadResults();
   }
 
   ngOnDestroy(): void {
     this.precisionRecallChart?.dispose();
     this.matchBreakdownChart?.dispose();
+    this.methodAverageChart?.dispose();
+  }
+
+  private loadResults(): void {
+    this.benchmarkService.listResults().subscribe((results) => {
+      this.results = results;
+      this.selectedResult = results[0] ?? null;
+      this.methodAverages = this.computeMethodAverages(results);
+      this.updateCharts();
+      this.updateMethodAverageChart();
+      this.syncHeights();
+    });
+  }
+
+  clearAll(): void {
+    if (!confirm(`Delete all ${this.results.length} stored results? This cannot be undone.`)) return;
+    this.benchmarkService.clearResults().subscribe(() => {
+      this.results = [];
+      this.selectedResult = null;
+      this.methodAverages = [];
+      this.precisionRecallChart?.dispose();
+      this.matchBreakdownChart?.dispose();
+      this.methodAverageChart?.dispose();
+    });
   }
 
   selectResult(result: BenchmarkSummaryView): void {
@@ -46,6 +74,55 @@ export class ResultsComponent implements OnInit, OnDestroy {
 
   viewTrace(result: BenchmarkSummaryView): void {
     this.router.navigate(['/trace', result.resultId]);
+  }
+
+  downloadFig5(): void {
+    if (!this.methodAverageChart) return;
+    const a = document.createElement('a');
+    a.href = this.methodAverageChart.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#ffffff' });
+    a.download = 'figure5-method-averages.png';
+    a.click();
+  }
+
+  /**
+   * Figure 5 aggregation over the Web-benchmark runs (dblp-* excluded), using
+   * the paper's rule (sec. 6.1): keep the LATEST run per (pair, method);
+   * average precision over non-empty runs only, recall over all runs.
+   * Timed-out runs join nothing, so they count as recall 0.
+   */
+  private computeMethodAverages(results: BenchmarkSummaryView[]): MethodAverage[] {
+    const latest = new Map<string, BenchmarkSummaryView>();
+    for (const r of results) { // results are newest-first, keep first occurrence
+      if (r.pairId.startsWith('dblp-')) continue;
+      const key = `${r.pairId}|${r.method || 'AJ'}`;
+      if (!latest.has(key)) latest.set(key, r);
+    }
+    const byMethod = new Map<string, BenchmarkSummaryView[]>();
+    for (const r of latest.values()) {
+      const m = r.method || 'AJ';
+      byMethod.set(m, [...(byMethod.get(m) || []), r]);
+    }
+    const averages: MethodAverage[] = [];
+    for (const [method, runs] of byMethod) {
+      const withGt = runs.filter(r => r.groundTruthPairs > 0);
+      if (withGt.length === 0) continue;
+      const nonEmpty = withGt.filter(r => r.joinedPairs > 0);
+      const precision = nonEmpty.length === 0 ? 0
+        : nonEmpty.reduce((s, r) => s + r.precision, 0) / nonEmpty.length;
+      const recall = withGt.reduce((s, r) => s + r.recall, 0) / withGt.length;
+      averages.push({ method, precision, recall, cases: withGt.length });
+    }
+    return averages.sort((a, b) => a.method.localeCompare(b.method));
+  }
+
+  private updateMethodAverageChart(): void {
+    setTimeout(() => {
+      this.methodAverageChart?.dispose();
+      const el = document.getElementById('methodAvgChart');
+      if (!el || this.methodAverages.length === 0) return;
+      this.methodAverageChart = echarts.init(el);
+      this.methodAverageChart.setOption(buildMethodAverageOption(this.methodAverages));
+    });
   }
 
   private syncHeights(): void {

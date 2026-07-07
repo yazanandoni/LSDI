@@ -8,10 +8,9 @@
         precision/recall with detailed mismatch feedback.
       </p>
       <div class="hero__actions">
-        <button class="btn btn--primary" (click)="runAll()" [disabled]="running">
-          {{ running ? 'Running all benchmarks...' : 'Run all benchmarks' }}
-        </button>
-        <a class="btn btn--ghost" routerLink="/benchmarks">Pick specific</a>
+        <a class="btn btn--primary" routerLink="/benchmarks">Web Benchmarks</a>
+        <a class="btn btn--primary" routerLink="/dblp">DBLP</a>
+        <a class="btn btn--ghost" routerLink="/scalability">DBLP Timing</a>
         <a class="btn btn--ghost" routerLink="/upload">Upload CSVs</a>
       </div>
     </div>

@@ -1,0 +1,81 @@
+<section class="container section">
+  <a class="back-link" routerLink="/">← Back to Dashboard</a>
+  <div class="section__header">
+    <div>
+      <p class="eyebrow">DBLP scalability</p>
+      <h2>DBLP Benchmark Pairs</h2>
+    </div>
+    <p class="helper">Select DBLP sizes, choose a join method, and run. Results appear on the Results page with trace support.</p>
+  </div>
+
+
+  <div class="toolbar" *ngIf="benchmarks.length > 0">
+    <div class="toolbar__left">
+      <span class="toolbar__count">{{ selectedIds.size }} / {{ benchmarks.length }} selected</span>
+    </div>
+    <div class="toolbar__right">
+      <button class="btn btn--ghost-sm" (click)="selectAll()">Select all</button>
+      <button class="btn btn--ghost-sm" (click)="deselectAll()">Deselect all</button>
+      <button class="btn btn--primary" (click)="runSelected()" [disabled]="selectedIds.size === 0 || running">
+        {{ running ? 'Running...' : 'Run selected (' + selectedIds.size + ')' }}
+      </button>
+    </div>
+  </div>
+
+  <div class="table-wrap card" *ngIf="benchmarks.length > 0; else emptyState">
+    <table class="benchmark-table">
+      <thead>
+        <tr>
+          <th class="col-check"></th>
+          <th class="col-name">Pair ID</th>
+          <th class="col-rows">Source</th>
+          <th class="col-rows">Target</th>
+          <th class="col-keys">Source keys</th>
+          <th class="col-keys">Target keys</th>
+          <th class="col-method">Method</th>
+          <th class="col-action"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let benchmark of benchmarks"
+            [class.benchmark--selected]="selectedIds.has(benchmark.pairId)"
+            (click)="toggleSelection(benchmark.pairId)">
+          <td class="col-check">
+            <div class="check" [class.check--on]="selectedIds.has(benchmark.pairId)"></div>
+          </td>
+          <td class="col-name">{{ benchmark.pairId }}</td>
+          <td class="col-rows">{{ benchmark.sourceRows }} rows / {{ benchmark.sourceColumns }} cols</td>
+          <td class="col-rows">{{ benchmark.targetRows }} rows / {{ benchmark.targetColumns }} cols</td>
+          <td class="col-keys">{{ benchmark.sourceKeys.join(', ') }}</td>
+          <td class="col-keys">{{ benchmark.targetKeys.join(', ') }}</td>
+          <td class="col-method">
+            <select class="method-select" [value]="getMethod(benchmark.pairId)"
+                    (change)="setMethod(benchmark.pairId, $any($event.target).value)"
+                    (click)="$event.stopPropagation()">
+              <option *ngFor="let m of methods" [value]="m">{{ m }}</option>
+            </select>
+          </td>
+          <td class="col-action">
+            <button class="btn btn--sm" (click)="$event.stopPropagation(); runSingle(benchmark.pairId, getMethod(benchmark.pairId))" [disabled]="running">
+              Run
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <ng-template #emptyState>
+    <div class="card empty">
+      <p>No DBLP fixtures found.</p>
+    </div>
+  </ng-template>
+
+  <div class="card status" *ngIf="statusMessage">
+    <p>{{ statusMessage }}</p>
+  </div>
+
+  <p class="limits-footer" *ngIf="systemInfo">
+    heap: {{ heapGb }} GB · timeout: {{ systemInfo.baselineTimeoutSeconds }}s
+  </p>
+</section>

@@ -8,6 +8,23 @@
     <p class="helper">Click a run to view diagnostics and mismatch samples.</p>
   </div>
 
+  <div class="results-toolbar" *ngIf="results.length > 0">
+    <span class="results-toolbar__count">{{ results.length }} stored run(s)</span>
+    <button class="btn btn--ghost-sm btn--danger" (click)="clearAll()">Clear all results</button>
+  </div>
+
+  <div class="card fig5-chart" *ngIf="methodAverages.length > 0">
+    <div class="chart-actions">
+      <button class="btn btn--ghost-sm" (click)="downloadFig5()">&#10515; Download PNG</button>
+    </div>
+    <div id="methodAvgChart" class="fig5-chart__canvas"></div>
+    <p class="helper fig5-chart__note">
+      Averages over the latest run of each (pair, method) on the Web benchmark
+      — run every pair with "All" (or the "Run all" button) on the Benchmarks
+      page to fill this in like the paper's Figure 5b.
+    </p>
+  </div>
+
   <div class="grid layout">
     <div class="card results-list">
       <h3>Runs</h3>
@@ -20,10 +37,15 @@
           <p class="direction">{{ result.direction }}</p>
           <p class="duration">{{ result.durationMs }}ms</p>
         </div>
-        <div class="metrics">
+        <div class="metrics" *ngIf="!result.timedOut; else timeoutBadge">
           <span>P {{ result.precision | number: '1.2-2' }}</span>
           <span>R {{ result.recall | number: '1.2-2' }}</span>
         </div>
+        <ng-template #timeoutBadge>
+          <div class="metrics">
+            <span class="timeout-badge">⏱ TIMEOUT</span>
+          </div>
+        </ng-template>
       </div>
     </div>
 
@@ -33,15 +55,19 @@
           <p class="label">{{ selectedResult.pairId }}</p>
           <h3>{{ selectedResult.direction }}</h3>
           <p class="helper">Transform: {{ selectedResult.transformation || 'n/a' }}</p>
+          <p class="helper timeout-note" *ngIf="selectedResult.timedOut">
+            ⏱ Did not finish within the configured time budget — the paper (§6.4)
+            cuts these methods off the same way; only Auto-Join scales.
+          </p>
         </div>
         <div class="stats">
           <div>
             <span>Precision</span>
-            <strong>{{ selectedResult.precision | number: '1.2-2' }}</strong>
+            <strong>{{ selectedResult.timedOut ? '—' : (selectedResult.precision | number: '1.2-2') }}</strong>
           </div>
           <div>
             <span>Recall</span>
-            <strong>{{ selectedResult.recall | number: '1.2-2' }}</strong>
+            <strong>{{ selectedResult.timedOut ? '—' : (selectedResult.recall | number: '1.2-2') }}</strong>
           </div>
           <div>
             <span>True positives</span>
@@ -55,7 +81,7 @@
           </div>
           <div>
             <a class="btn btn--secondary"
-               [href]="'http://localhost:8080/api/results/' + selectedResult.resultId + '/csv'"
+               [href]="apiBase + '/results/' + selectedResult.resultId + '/csv'"
                download>Download CSV</a>
           </div>
           <div>
