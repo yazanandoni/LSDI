@@ -27,22 +27,26 @@ import java.util.*;
  *   5. Rejects constant-only programs and returns the LearnedTransformation with
  *      the highest injective score (null if none scores at least 1).
  *
- * Paper parameters (Section 3.2 / Algorithm 4):
- *   k = 10   top matches used per group
- *   b = 3    examples per learning attempt
- *   r = 5    random subsets tried per group
+ * Parameters (Algorithm 4's k / b / r / L): the paper defines these as formal
+ * inputs but never publishes the values used in its experiments. The only
+ * anchored numbers are b — "in practice we just need a few examples (3 or 4)"
+ * (Section 3.2) — and Appendix H's success-bound example of T = 128 trials,
+ * where per Proposition 3 a single 3-example trial already succeeds with
+ * probability ~0.9999. Our k and r below are therefore implementation choices,
+ * sized so the learning stage's runtime is small (its cost is nearly
+ * data-size-independent: attempts × the synthesizer's CPU budget) while the
+ * web-benchmark quality stays at the reproduced Figure 5b level.
  */
 public class TransformationLearner {
 
     private static final int TOP_K = 20;
     private static final int SUBSET_SIZE = 3;
-    // Number of random-subset trials per group (Algorithm 4's r / the T of
-    // the Appendix H success bound, which uses T = 128). The paper's value is
-    // affordable on their hardware; empirically on our benchmarks 128 trials
-    // produced identical join results to 12 at ~5x the runtime (the score
-    // plateaus almost immediately), so we keep the budget small. Failure
-    // probability drops exponentially in T (Proposition 3), so raise this if
-    // a dataset's transform is being missed rather than mis-ranked.
+    // Number of random-subset trials per group (Algorithm 4's r). Appendix H's
+    // bound example uses T = 128 trials, but the score plateaus almost
+    // immediately: empirically on our benchmarks 128 trials produced join
+    // results identical to 12 at ~5x the runtime. Failure probability drops
+    // exponentially in T (Proposition 3), so raise this if a dataset's
+    // transform is being missed rather than mis-ranked.
     private static final int SUBSETS_PER_GROUP = 12;
 
     // Algorithm 4's L: global cap on example sets across ALL column-pair
@@ -50,14 +54,6 @@ public class TransformationLearner {
     // score, so the budget is spent on the most promising column pairs first
     // and a table with many junk column pairs cannot blow up the runtime.
     private static final int MAX_TOTAL_SUBSETS = 512;
-
-    // Stagnation cutoff: stop a group's trials after this many consecutive
-    // attempts that fail to improve the group's best score. The exponential
-    // success bound (Appendix H) means a better transform that exists is
-    // overwhelmingly likely to surface within a window this large, so once
-    // the score plateaus the remaining trials of the 128 ceiling would almost
-    // surely just re-confirm the incumbent — at full synthesis cost each.
-    private static final int STAGNATION_LIMIT = 16;
 
     /**
      * Minimum length of a derived key for it to count toward the injective score.
@@ -70,18 +66,6 @@ public class TransformationLearner {
      * comfortably longer than this.
      */
     private static final int MIN_DERIVED_KEY_LEN = 3;
-
-    /**
-     * Stop trying subsets of a column pair after this many search-guard aborts.
-     * Set to the full trial count — i.e. groups are no longer abandoned on
-     * aborts. Junk column pairs are already cut by the relative evidence
-     * pruning before any synthesis runs, so the remaining aborts come from
-     * REAL join columns whose example pool mixes good pairs with q-gram
-     * coincidences or name-style variations (texas govs, us presidents):
-     * abandoning those groups after a few poisoned subsets returned an empty
-     * join even though clean subsets existed later in the trial sequence.
-     */
-    private static final int MAX_GROUP_ABORTS = SUBSETS_PER_GROUP;
 
     /** Attempts synthesized concurrently per wave (see learnGroup). */
     private static final int WAVE_SIZE = 4;
@@ -242,26 +226,18 @@ public class TransformationLearner {
         }
 
         long groupStart = System.nanoTime();
-        int attempts = 0, slowAttempts = 0, aborts = 0;
-        int sinceImprovement = 0;
-        boolean abandoned = false;
+        int attempts = 0, slowAttempts = 0;
         LearnedTransformation best = null;
 
         // Attempts run in parallel WAVES: synthesis calls within a wave are
         // independent (one synthesizer each — the memo is per-attempt anyway),
-        // while the early-stop decisions (abort guard, stagnation) are
-        // evaluated sequentially between waves in deterministic order. Worst
-        // case this wastes one wave of doomed attempts; in return a wave's
-        // wall time is its slowest attempt instead of the sum.
+        // while results are folded sequentially between waves in deterministic
+        // order, so the outcome matches a sequential run. A wave's wall time
+        // is its slowest attempt instead of the sum. Like the paper's
+        // Algorithm 4, every generated example set is tried — there is no
+        // early exit once a good program is found.
         int waveSize = WAVE_SIZE;
-        for (int w = 0; w < subsets.size() && !abandoned; w += waveSize) {
-            if (sinceImprovement >= STAGNATION_LIMIT) {
-                if (DEBUG) System.err.printf(
-                        "    [learn] %s->%s plateaued after %d attempts (best=%d)%n",
-                        srcColName, tgtColName, attempts, best == null ? 0 : best.score);
-                break;
-            }
-
+        for (int w = 0; w < subsets.size(); w += waveSize) {
             List<List<int[]>> wave = subsets.subList(w, Math.min(w + waveSize, subsets.size()));
             List<AttemptResult> results = wave.parallelStream()
                     .map(subset -> runAttempt(subset, sourceTable, tgtCol))
@@ -271,26 +247,12 @@ public class TransformationLearner {
                 if (r == null) continue; // subset had no usable examples
 
                 attempts++;
-                sinceImprovement++;
                 if (r.millis > 200) {
                     slowAttempts++;
                     if (DEBUG) System.err.printf(
                             "    [learn] SLOW attempt %dms  %s->%s  nodes=%d  examples=%s%n",
                             r.millis, srcColName, tgtColName, r.nodes,
                             describeExamples(r.examples));
-                }
-
-                // Doomed-pair early stop: if multiple subsets exhaust the search
-                // guard without yielding a program, the column pair almost
-                // certainly does not join — stop wasting attempts on it. Each
-                // guard-aborted attempt costs nearly a second on wide text
-                // columns, so cutting these dominates the learning runtime.
-                if (r.aborted && ++aborts >= MAX_GROUP_ABORTS) {
-                    if (DEBUG) System.err.printf(
-                            "    [learn] abandoning %s->%s after %d aborts%n",
-                            srcColName, tgtColName, aborts);
-                    abandoned = true;
-                    break;
                 }
 
                 if (r.program == null) continue;
@@ -306,7 +268,6 @@ public class TransformationLearner {
                 if (score < 1) continue; // no clean 1:1 match — not a real join
                 if (best == null || score > best.score) {
                     best = new LearnedTransformation(r.program, srcColName, tgtColName, score);
-                    sinceImprovement = 0;
                 }
             }
         }
@@ -324,15 +285,13 @@ public class TransformationLearner {
     /** Outcome of one synthesis attempt, carried back from a worker thread. */
     private static final class AttemptResult {
         final TransformationProgram program; // null if none found
-        final boolean aborted;
         final long millis;
         final int nodes;
         final List<ExamplePair> examples;
 
-        AttemptResult(TransformationProgram program, boolean aborted,
+        AttemptResult(TransformationProgram program,
                       long millis, int nodes, List<ExamplePair> examples) {
             this.program = program;
-            this.aborted = aborted;
             this.millis = millis;
             this.nodes = nodes;
             this.examples = examples;
@@ -355,8 +314,7 @@ public class TransformationLearner {
         long t0 = System.nanoTime();
         TransformationProgram program = synthesizer.tryLearnTransform(examples);
         long ms = (System.nanoTime() - t0) / 1_000_000;
-        return new AttemptResult(program, synthesizer.lastAttemptAborted(),
-                ms, synthesizer.lastNodesVisited(), examples);
+        return new AttemptResult(program, ms, synthesizer.lastNodesVisited(), examples);
     }
 
     /** Compact one-line view of example pairs, for debug logging. */

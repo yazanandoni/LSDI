@@ -8,14 +8,6 @@ export interface BenchmarkDescriptor {
   targetKeys: string[];
 }
 
-export interface BenchmarkRunRequest {
-  pairId: string;
-}
-
-export interface ResultIdResponse {
-  resultId: string;
-}
-
 export interface Mismatch {
   sourceFingerprint: string;
   expectedTarget: string[] | null;
