@@ -104,29 +104,20 @@ public class TransformationSynthesizer {
     private int nodesVisited;
     /** Nano-time deadline for the current attempt. */
     private long deadlineNanos;
-    /** Whether the most recent attempt was cut short by the node/time guard. */
-    private boolean lastAborted;
 
     /** Thrown to unwind the recursion immediately when {@link #MAX_NODES} is hit. */
     private static final class SearchAbortedException extends RuntimeException {
         SearchAbortedException() { super(null, null, false, false); }
     }
 
+    /** Search nodes visited during the most recent {@link #tryLearnTransform} call (diagnostics). */
+    int lastNodesVisited() { return nodesVisited; }
+
     /**
      * Attempt to learn a transformation from the given examples.
      *
      * @return the learned program, or null if no consistent program was found.
      */
-    /** Search nodes visited during the most recent {@link #tryLearnTransform} call (diagnostics). */
-    int lastNodesVisited() { return nodesVisited; }
-
-    /**
-     * Whether the most recent attempt was abandoned at the node/time guard
-     * (rather than failing fast). Repeated aborts on a column pair indicate it
-     * does not join, so callers can stop trying further subsets of that pair.
-     */
-    boolean lastAttemptAborted() { return lastAborted; }
-
     public TransformationProgram tryLearnTransform(List<ExamplePair> examples) {
         // Fresh memo per top-level attempt: the source rows differ between
         // attempts, so cached results must not leak across them.
@@ -134,11 +125,9 @@ public class TransformationSynthesizer {
         failed = new HashSet<>();
         nodesVisited = 0;
         deadlineNanos = threadCpuNanos() + BUDGET_NANOS;
-        lastAborted = false;
         try {
             return search(examples, MAX_OPERATORS);
         } catch (SearchAbortedException aborted) {
-            lastAborted = true;
             return null; // node/time guard hit: treat as "no transformation found"
         }
     }

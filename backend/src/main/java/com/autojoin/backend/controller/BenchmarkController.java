@@ -1,18 +1,15 @@
 package com.autojoin.backend.controller;
 
-import com.autojoin.backend.model.BatchRunRequest;
 import com.autojoin.backend.model.BenchmarkDescriptor;
 import com.autojoin.backend.model.BenchmarkRunRequest;
 import com.autojoin.backend.model.BenchmarkSummary;
 import com.autojoin.backend.model.BenchmarkSummaryView;
-import com.autojoin.backend.model.ResultIdResponse;
 import com.autojoin.backend.service.BenchmarkResultStore;
 import com.autojoin.backend.service.BenchmarkService;
 import com.autojoin.backend.service.BenchmarkService.BenchmarkRunOutcome;
 import com.autojoin.trace.AlgorithmTrace;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -71,17 +68,6 @@ public class BenchmarkController {
         return benchmarkService.listBenchmarks();
     }
 
-    @PostMapping("/benchmarks/run")
-    public ResponseEntity<ResultIdResponse> runBenchmark(@Valid @RequestBody BenchmarkRunRequest request)
-            throws IOException {
-        String method = request.method() != null ? request.method() : "AJ";
-        BenchmarkRunOutcome outcome = benchmarkService.runBenchmark(request.pairId(), method);
-        String resultId = resultStore.save(outcome.summary());
-        resultStore.saveCsv(resultId, outcome.csv());
-        resultStore.saveTrace(resultId, outcome.trace());
-        return ResponseEntity.ok(new ResultIdResponse(resultId));
-    }
-
     /** Start a run in the background; poll /benchmarks/jobs/{id} for the result. */
     @PostMapping("/benchmarks/run-async")
     public ResponseEntity<Map<String, String>> runBenchmarkAsync(
@@ -128,44 +114,6 @@ public class BenchmarkController {
         return Map.of(
                 "maxHeapBytes", Runtime.getRuntime().maxMemory(),
                 "baselineTimeoutSeconds", benchmarkService.getBaselineTimeoutSeconds());
-    }
-
-    @PostMapping("/benchmarks/run-all")
-    public ResponseEntity<List<ResultIdResponse>> runAllBenchmarks() throws IOException {
-        List<BenchmarkDescriptor> all = benchmarkService.listBenchmarks();
-        List<String> pairIds = all.stream().map(BenchmarkDescriptor::pairId).toList();
-        List<BenchmarkRunOutcome> outcomes = benchmarkService.runBenchmarks(pairIds, "AJ");
-        List<ResultIdResponse> ids = outcomes.stream()
-                .map(o -> {
-                    String id = resultStore.save(o.summary());
-                    resultStore.saveCsv(id, o.csv());
-                    resultStore.saveTrace(id, o.trace());
-                    return new ResultIdResponse(id);
-                })
-                .toList();
-        return ResponseEntity.ok(ids);
-    }
-
-    @PostMapping("/benchmarks/run-batch")
-    public ResponseEntity<List<ResultIdResponse>> runBatch(@RequestBody BatchRunRequest request)
-            throws IOException {
-        List<String> methods = request.methods();
-        List<BenchmarkRunOutcome> outcomes;
-        if (methods != null && !methods.isEmpty()) {
-            List<String> pairIds = request.pairIds();
-            outcomes = benchmarkService.runBenchmarks(pairIds, methods);
-        } else {
-            outcomes = benchmarkService.runBenchmarks(request.pairIds(), "AJ");
-        }
-        List<ResultIdResponse> ids = outcomes.stream()
-                .map(o -> {
-                    String id = resultStore.save(o.summary());
-                    resultStore.saveCsv(id, o.csv());
-                    resultStore.saveTrace(id, o.trace());
-                    return new ResultIdResponse(id);
-                })
-                .toList();
-        return ResponseEntity.ok(ids);
     }
 
     @GetMapping("/results/{id}")

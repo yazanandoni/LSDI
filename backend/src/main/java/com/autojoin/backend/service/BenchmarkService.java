@@ -259,23 +259,6 @@ public class BenchmarkService {
             csv, trace);
     }
 
-    public List<BenchmarkRunOutcome> runBenchmarks(List<String> pairIds, String method) throws IOException {
-        List<BenchmarkRunOutcome> outcomes = new ArrayList<>();
-        for (String pairId : pairIds) {
-            outcomes.add(runBenchmark(pairId, method));
-        }
-        return outcomes;
-    }
-
-    public List<BenchmarkRunOutcome> runBenchmarks(List<String> pairIds, List<String> methods) throws IOException {
-        List<BenchmarkRunOutcome> outcomes = new ArrayList<>();
-        for (int i = 0; i < pairIds.size(); i++) {
-            String method = (methods != null && i < methods.size()) ? methods.get(i) : "AJ";
-            outcomes.add(runBenchmark(pairIds.get(i), method));
-        }
-        return outcomes;
-    }
-
     /** Cached FJ-O oracle config; computed once from all web-benchmark cases. */
     private volatile FuzzyJoinOracle.Config fjoOracleConfig;
 
