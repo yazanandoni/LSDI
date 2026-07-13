@@ -1,0 +1,29 @@
+{
+  "pair_id": "synthetic-time",
+  "source": {
+    "file": "data/raw/synthetic/time/source.csv",
+    "key_columns": [
+      "second",
+      "minute",
+      "hour"
+    ]
+  },
+  "target": {
+    "file": "data/raw/synthetic/time/target.csv",
+    "key_columns": [
+      "time"
+    ]
+  },
+  "ground_truth": {
+    "file": "data/raw/synthetic/time/ground_truth.csv",
+    "format": "row_values",
+    "source_key_columns": [
+      "second",
+      "minute",
+      "hour"
+    ],
+    "target_key_columns": [
+      "time"
+    ]
+  }
+}

@@ -13,8 +13,8 @@ export class ShellComponent {
     { label: 'Dashboard', path: '' },
     { label: 'Benchmarks', path: 'benchmarks' },
     { label: 'DBLP', path: 'dblp' },
+    { label: 'Synthetic', path: 'synthetic' },
     { label: 'Scalability', path: 'scalability' },
-    { label: 'Results', path: 'results' },
-    { label: 'Upload', path: 'upload' }
+    { label: 'Results', path: 'results' }
   ];
 }

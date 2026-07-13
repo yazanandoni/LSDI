@@ -5,18 +5,24 @@ import { FormsModule } from '@angular/forms';
 import { BenchmarkService } from '../../services/benchmark.service';
 import { BenchmarkDescriptor } from '../../app.models';
 
+/**
+ * Synthetic benchmark page (paper sec. 6.3.3): the 4 cases reconstructed from
+ * Warren & Tompa (VLDB 2006) — UserID, Time, NameConcat, Citeseer. Generated
+ * by scripts/synthetic_benchmark.py; all 8 sec. 6.2 methods are runnable, as
+ * in the paper's Figure 9d. Mirrors the Benchmarks page, filtered to
+ * synthetic-* fixtures.
+ */
 @Component({
-  selector: 'app-benchmarks',
+  selector: 'app-synthetic',
   standalone: true,
   imports: [RouterLink, NgFor, NgIf, FormsModule],
-  templateUrl: './benchmarks.component.html',
-  styleUrl: './benchmarks.component.scss'
+  templateUrl: './synthetic.component.html',
+  styleUrl: '../benchmarks/benchmarks.component.scss'
 })
-export class BenchmarksComponent implements OnInit {
+export class SyntheticComponent implements OnInit {
   benchmarks: BenchmarkDescriptor[] = [];
-  // The paper's full §6.2 method set is runnable on the Web benchmark
-  // (the DBLP pages only expose the §6.4 scalability subset AJ/SM/FJ-C/FJ-O).
-  allMethods = ['AJ', 'AJ-E', 'SM', 'DQ-P', 'DQ-R', 'FJ-C', 'FJ-FR', 'FJ-O'];
+  // Paper Table 2 / Figure 9d evaluate the Synthetic benchmark without AJ-E.
+  allMethods = ['AJ', 'SM', 'DQ-P', 'DQ-R', 'FJ-C', 'FJ-FR', 'FJ-O'];
   methods = [...this.allMethods, 'All'];
   selectedIds = new Set<string>();
   methodMap = new Map<string, string>();
@@ -30,8 +36,7 @@ export class BenchmarksComponent implements OnInit {
 
   ngOnInit(): void {
     this.benchmarkService.listBenchmarks().subscribe((benchmarks) => {
-      this.benchmarks = benchmarks.filter(
-        b => !b.pairId.startsWith('dblp-') && !b.pairId.startsWith('synthetic-'));
+      this.benchmarks = benchmarks.filter(b => b.pairId.startsWith('synthetic-'));
     });
   }
 
@@ -77,10 +82,6 @@ export class BenchmarksComponent implements OnInit {
     this.runQueue(methods.map((m) => ({ pairId, method: m })));
   }
 
-  // Runs execute sequentially via the async job API (start + poll) so no HTTP
-  // connection is held open for the duration of a run — a long queue (e.g. the
-  // FJ-O grid over every pair) otherwise dies at the browser's connection
-  // limit ("status 0 Unknown Error").
   private runQueue(runs: { pairId: string; method: string }[]): void {
     if (runs.length === 0) return;
     this.running = true;

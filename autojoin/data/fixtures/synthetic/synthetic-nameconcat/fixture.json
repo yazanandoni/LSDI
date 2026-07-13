@@ -1,0 +1,27 @@
+{
+  "pair_id": "synthetic-nameconcat",
+  "source": {
+    "file": "data/raw/synthetic/nameconcat/source.csv",
+    "key_columns": [
+      "first",
+      "last"
+    ]
+  },
+  "target": {
+    "file": "data/raw/synthetic/nameconcat/target.csv",
+    "key_columns": [
+      "full"
+    ]
+  },
+  "ground_truth": {
+    "file": "data/raw/synthetic/nameconcat/ground_truth.csv",
+    "format": "row_values",
+    "source_key_columns": [
+      "first",
+      "last"
+    ],
+    "target_key_columns": [
+      "full"
+    ]
+  }
+}

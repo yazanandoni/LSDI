@@ -24,9 +24,11 @@ export class ResultsComponent implements OnInit, OnDestroy {
   results: BenchmarkSummaryView[] = [];
   selectedResult: BenchmarkSummaryView | null = null;
   methodAverages: MethodAverage[] = [];
+  syntheticAverages: MethodAverage[] = [];
   precisionRecallChart?: echarts.ECharts;
   matchBreakdownChart?: echarts.ECharts;
   methodAverageChart?: echarts.ECharts;
+  syntheticAverageChart?: echarts.ECharts;
 
   constructor(
     private benchmarkService: BenchmarkService,
@@ -41,13 +43,17 @@ export class ResultsComponent implements OnInit, OnDestroy {
     this.precisionRecallChart?.dispose();
     this.matchBreakdownChart?.dispose();
     this.methodAverageChart?.dispose();
+    this.syntheticAverageChart?.dispose();
   }
 
   private loadResults(): void {
     this.benchmarkService.listResults().subscribe((results) => {
       this.results = results;
       this.selectedResult = results[0] ?? null;
-      this.methodAverages = this.computeMethodAverages(results);
+      this.methodAverages = this.computeMethodAverages(
+        results, (id) => !id.startsWith('dblp-') && !id.startsWith('synthetic-'));
+      this.syntheticAverages = this.computeMethodAverages(
+        results, (id) => id.startsWith('synthetic-'));
       this.updateCharts();
       this.updateMethodAverageChart();
       this.syncHeights();
@@ -60,9 +66,11 @@ export class ResultsComponent implements OnInit, OnDestroy {
       this.results = [];
       this.selectedResult = null;
       this.methodAverages = [];
+      this.syntheticAverages = [];
       this.precisionRecallChart?.dispose();
       this.matchBreakdownChart?.dispose();
       this.methodAverageChart?.dispose();
+      this.syntheticAverageChart?.dispose();
     });
   }
 
@@ -84,16 +92,25 @@ export class ResultsComponent implements OnInit, OnDestroy {
     a.click();
   }
 
+  downloadFig9d(): void {
+    if (!this.syntheticAverageChart) return;
+    const a = document.createElement('a');
+    a.href = this.syntheticAverageChart.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#ffffff' });
+    a.download = 'figure9d-synthetic-averages.png';
+    a.click();
+  }
+
   /**
-   * Figure 5 aggregation over the Web-benchmark runs (dblp-* excluded), using
-   * the paper's rule (sec. 6.1): keep the LATEST run per (pair, method);
+   * Figure 5 / Figure 9d aggregation over the runs selected by `include`,
+   * using the paper's rule (sec. 6.1): keep the LATEST run per (pair, method);
    * average precision over non-empty runs only, recall over all runs.
    * Timed-out runs join nothing, so they count as recall 0.
    */
-  private computeMethodAverages(results: BenchmarkSummaryView[]): MethodAverage[] {
+  private computeMethodAverages(results: BenchmarkSummaryView[],
+                                include: (pairId: string) => boolean): MethodAverage[] {
     const latest = new Map<string, BenchmarkSummaryView>();
     for (const r of results) { // results are newest-first, keep first occurrence
-      if (r.pairId.startsWith('dblp-')) continue;
+      if (!include(r.pairId)) continue;
       const key = `${r.pairId}|${r.method || 'AJ'}`;
       if (!latest.has(key)) latest.set(key, r);
     }
@@ -119,9 +136,17 @@ export class ResultsComponent implements OnInit, OnDestroy {
     setTimeout(() => {
       this.methodAverageChart?.dispose();
       const el = document.getElementById('methodAvgChart');
-      if (!el || this.methodAverages.length === 0) return;
-      this.methodAverageChart = echarts.init(el);
-      this.methodAverageChart.setOption(buildMethodAverageOption(this.methodAverages));
+      if (el && this.methodAverages.length > 0) {
+        this.methodAverageChart = echarts.init(el);
+        this.methodAverageChart.setOption(buildMethodAverageOption(this.methodAverages));
+      }
+      this.syntheticAverageChart?.dispose();
+      const synthEl = document.getElementById('synthAvgChart');
+      if (synthEl && this.syntheticAverages.length > 0) {
+        this.syntheticAverageChart = echarts.init(synthEl);
+        this.syntheticAverageChart.setOption(buildMethodAverageOption(
+          this.syntheticAverages, 'Figure 9d — Synthetic Avg P / R'));
+      }
     });
   }
 

@@ -1,5 +1,5 @@
 <section class="container section">
-  <a class="back-link" routerLink="/benchmarks">← Back to Benchmarks</a>
+  <a class="back-link" routerLink="/">← Back to Dashboard</a>
   <div class="section__header">
     <div>
       <p class="eyebrow">Benchmark results</p>
@@ -13,16 +13,29 @@
     <button class="btn btn--ghost-sm btn--danger" (click)="clearAll()">Clear all results</button>
   </div>
 
-  <div class="card fig5-chart" *ngIf="methodAverages.length > 0">
-    <div class="chart-actions">
-      <button class="btn btn--ghost-sm" (click)="downloadFig5()">&#10515; Download PNG</button>
+  <div class="fig-row">
+    <div class="card fig5-chart" *ngIf="methodAverages.length > 0">
+      <div class="chart-actions">
+        <button class="btn btn--ghost-sm" (click)="downloadFig5()">&#10515; Download PNG</button>
+      </div>
+      <div id="methodAvgChart" class="fig5-chart__canvas"></div>
+      <p class="helper fig5-chart__note">
+        Averages over the latest run of each (pair, method) on the Web benchmark
+        — run every pair with "All" (or the "Run all" button) on the Benchmarks
+        page to fill this in like the paper's Figure 5b.
+      </p>
     </div>
-    <div id="methodAvgChart" class="fig5-chart__canvas"></div>
-    <p class="helper fig5-chart__note">
-      Averages over the latest run of each (pair, method) on the Web benchmark
-      — run every pair with "All" (or the "Run all" button) on the Benchmarks
-      page to fill this in like the paper's Figure 5b.
-    </p>
+
+    <div class="card fig5-chart" *ngIf="syntheticAverages.length > 0">
+      <div class="chart-actions">
+        <button class="btn btn--ghost-sm" (click)="downloadFig9d()">&#10515; Download PNG</button>
+      </div>
+      <div id="synthAvgChart" class="fig5-chart__canvas"></div>
+      <p class="helper fig5-chart__note">
+        Same aggregation over the Synthetic benchmark (paper Figure 9d) — the
+        paper reports AJ and FJ-O at perfect precision and recall here.
+      </p>
+    </div>
   </div>
 
   <div class="grid layout">

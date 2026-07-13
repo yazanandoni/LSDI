@@ -54,7 +54,20 @@ public class ConstrainedFuzzyJoin {
      *    unrelated values sharing a numeric/word prefix look close, which collapses
      *    the cardinality-constrained threshold to ~0 and disables recovery.
      */
-    private enum Tokenization { QGRAM, WORD }
+    private enum Tokenization { QGRAM, QGRAM2, WORD }
+
+    /**
+     * Eq. 10 sweep space for the standalone FJ-C/FJ-FR baselines (paper §5:
+     * "a tokenziation scheme t from a space of possible configurations (e.g.,
+     * word, 2-gram, 3-gram, etc.)"). Auto-Join's own §5 recovery pass keeps
+     * its established QGRAM+WORD sweep (see recoverUnmatched) — the validated
+     * AJ web numbers depend on it, and 2-grams mostly matter for the short
+     * noisy values the baselines meet when joining RAW columns.
+     */
+    private static final List<Tokenization> BASELINE_SWEEP =
+            List.of(Tokenization.QGRAM, Tokenization.QGRAM2, Tokenization.WORD);
+    private static final List<Tokenization> RECOVERY_SWEEP =
+            List.of(Tokenization.QGRAM, Tokenization.WORD);
 
     /**
      * Cap on the cached pairwise distance matrix (distinct-value pairs). The
@@ -81,27 +94,43 @@ public class ConstrainedFuzzyJoin {
      * @return A list of successfully joined row pairs
      */
     public List<FuzzyJoinResult> executeJoin(List<String> transformedSourceColumn, List<String> targetKeyColumn) {
-        DistanceModel model = new DistanceModel(transformedSourceColumn, targetKeyColumn);
-        double optimalThreshold = model.findOptimalThreshold(true);
+        // Paper sec. 6.2 on the fuzzy-join baselines: "we join each row with
+        // top-1 fuzzy match in the other table to maintain high precision".
+        // Per tokenization (Eq. 10's t) each distinct source value gets its
+        // single closest target; the threshold is then tuned as loose as the
+        // cardinality constraints allow ON THE EMITTED MATCHES (each source
+        // row joins at most one target — structural under top-1 — and no
+        // target value is claimed by two distinct source values). Among the
+        // tokenizations, the one covering the most target rows wins (Eq. 9).
+        // A GLOBAL all-pairs constraint check would instead collapse the
+        // threshold whenever any source value merely sits near two targets
+        // (multi-term entities, similar usernames), joining almost nothing.
+        List<FuzzyJoinResult> best = List.of();
+        int bestCoverage = 0;
+        for (Tokenization tok : BASELINE_SWEEP) {
+            DistanceModel model = new DistanceModel(transformedSourceColumn, targetKeyColumn, tok);
+            int[] bestKi = model.closestTargets();
+            double threshold = model.topOneThreshold(bestKi);
 
-        List<FuzzyJoinResult> joinedRows = new ArrayList<>();
-        for (int i = 0; i < transformedSourceColumn.size(); i++) {
-            checkCancelled();
-            int ci = model.sourceValueIdx[i];
-            if (ci < 0) continue;
-
-            for (int j = 0; j < targetKeyColumn.size(); j++) {
-                int ki = model.targetValueIdx[j];
-                if (ki < 0) continue;
-
-                double distance = model.distance(ci, ki);
-                if (distance <= optimalThreshold) {
-                    joinedRows.add(new FuzzyJoinResult(i, j, distance));
+            List<FuzzyJoinResult> joinedRows = new ArrayList<>();
+            Set<Integer> coveredTargets = new HashSet<>();
+            int[] firstRow = model.firstRowOfTargetValue(targetKeyColumn.size());
+            for (int i = 0; i < transformedSourceColumn.size(); i++) {
+                int ci = model.sourceValueIdx[i];
+                if (ci < 0 || bestKi[ci] < 0) continue;
+                double d = model.distance(ci, bestKi[ci]);
+                if (d <= threshold) {
+                    int j = firstRow[bestKi[ci]];
+                    joinedRows.add(new FuzzyJoinResult(i, j, d));
+                    coveredTargets.add(j);
                 }
             }
+            if (coveredTargets.size() > bestCoverage) {
+                bestCoverage = coveredTargets.size();
+                best = joinedRows;
+            }
         }
-
-        return joinedRows;
+        return best;
     }
 
     /**
@@ -130,7 +159,7 @@ public class ConstrainedFuzzyJoin {
         // unmatched-only single-closest emission) guard precision regardless of
         // which tokenization is chosen.
         RecoveryOutcome best = new RecoveryOutcome(List.of(), 0.0);
-        for (Tokenization tok : Tokenization.values()) {
+        for (Tokenization tok : RECOVERY_SWEEP) {
             RecoveryOutcome outcome = recoverWith(tok, transformedSourceColumn,
                     targetKeyColumn, sourceMatched, targetMatched);
             if (outcome.getResults().size() > best.getResults().size()) {
@@ -254,6 +283,61 @@ public class ConstrainedFuzzyJoin {
                     sourceTokens.get(ci), targetTokens.get(ki));
         }
 
+        /** Each distinct source value's closest target value (-1 if none). */
+        int[] closestTargets() {
+            int[] bestKi = new int[sourceValues.size()];
+            for (int ci = 0; ci < sourceValues.size(); ci++) {
+                checkCancelled();
+                int best = -1;
+                double bestD = Double.MAX_VALUE;
+                for (int ki = 0; ki < targetValues.size(); ki++) {
+                    double d = distance(ci, ki);
+                    if (d < bestD) { bestD = d; best = ki; }
+                }
+                bestKi[ci] = best;
+            }
+            return bestKi;
+        }
+
+        /**
+         * Loosest threshold whose top-1 matches keep the distinct-source
+         * constraint: no target value may be the emitted closest match of two
+         * distinct source values whose distances are both within threshold.
+         */
+        double topOneThreshold(int[] bestKi) {
+            double low = 0.0, high = 1.0, optimal = 0.0;
+            while ((high - low) > EPSILON) {
+                double mid = low + (high - low) / 2.0;
+                if (topOneSatisfies(mid, bestKi)) {
+                    optimal = mid;
+                    low = mid;
+                } else {
+                    high = mid;
+                }
+            }
+            return optimal;
+        }
+
+        private boolean topOneSatisfies(double threshold, int[] bestKi) {
+            int[] claims = new int[targetValues.size()];
+            for (int ci = 0; ci < sourceValues.size(); ci++) {
+                int ki = bestKi[ci];
+                if (ki >= 0 && distance(ci, ki) <= threshold && ++claims[ki] > 1) return false;
+            }
+            return true;
+        }
+
+        /** First target ROW holding each distinct target value. */
+        int[] firstRowOfTargetValue(int numRows) {
+            int[] first = new int[targetValues.size()];
+            Arrays.fill(first, -1);
+            for (int j = 0; j < numRows; j++) {
+                int ki = targetValueIdx[j];
+                if (ki >= 0 && first[ki] < 0) first[ki] = j;
+            }
+            return first;
+        }
+
         /** Binary search for the loosest threshold that keeps the constraints. */
         double findOptimalThreshold(boolean enforceDistinctSourceConstraint) {
             double low = 0.0;
@@ -369,7 +453,11 @@ public class ConstrainedFuzzyJoin {
 
     /** Tokenize a value under the given scheme. */
     private static Set<String> tokenize(String text, Tokenization tok) {
-        return tok == Tokenization.WORD ? tokenizeToWords(text) : tokenizeToQGrams(text);
+        switch (tok) {
+            case WORD:   return tokenizeToWords(text);
+            case QGRAM2: return tokenizeToQGrams(text, 2);
+            default:     return tokenizeToQGrams(text, q);
+        }
     }
 
     /**
@@ -387,20 +475,20 @@ public class ConstrainedFuzzyJoin {
     }
 
     /**
-     * Breaks a string down into overlapping chunks of length q (q-grams).
+     * Breaks a string down into overlapping chunks of length {@code size} (q-grams).
      */
-    private static Set<String> tokenizeToQGrams(String text) {
+    private static Set<String> tokenizeToQGrams(String text, int size) {
         Set<String> qGrams = new HashSet<>();
 
-        if (text.length() < q) {
-            // If the word is shorter than 'q', just return the word itself as a single token
+        if (text.length() < size) {
+            // If the word is shorter than the gram size, return it as a single token
             qGrams.add(text);
             return qGrams;
         }
 
-        // Slide a window of length 'q' across the string
-        for (int i = 0; i <= text.length() - q; i++) {
-            qGrams.add(text.substring(i, i + q));
+        // Slide a window of length 'size' across the string
+        for (int i = 0; i <= text.length() - size; i++) {
+            qGrams.add(text.substring(i, i + size));
         }
 
         return qGrams;
