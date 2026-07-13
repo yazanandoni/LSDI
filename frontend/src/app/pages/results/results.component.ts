@@ -92,16 +92,16 @@ export class ResultsComponent implements OnInit, OnDestroy {
     a.click();
   }
 
-  downloadFig9d(): void {
+  downloadFig5c(): void {
     if (!this.syntheticAverageChart) return;
     const a = document.createElement('a');
     a.href = this.syntheticAverageChart.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#ffffff' });
-    a.download = 'figure9d-synthetic-averages.png';
+    a.download = 'figure5c-synthetic-averages.png';
     a.click();
   }
 
   /**
-   * Figure 5 / Figure 9d aggregation over the runs selected by `include`,
+   * Figure 5b / Figure 5c aggregation over the runs selected by `include`,
    * using the paper's rule (sec. 6.1): keep the LATEST run per (pair, method);
    * average precision over non-empty runs only, recall over all runs.
    * Timed-out runs join nothing, so they count as recall 0.
@@ -145,7 +145,7 @@ export class ResultsComponent implements OnInit, OnDestroy {
       if (synthEl && this.syntheticAverages.length > 0) {
         this.syntheticAverageChart = echarts.init(synthEl);
         this.syntheticAverageChart.setOption(buildMethodAverageOption(
-          this.syntheticAverages, 'Figure 9d — Synthetic Avg P / R'));
+          this.syntheticAverages, 'Synthetic'));
       }
     });
   }

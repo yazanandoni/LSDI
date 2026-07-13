@@ -27,7 +27,7 @@ const METHOD_COLORS: Record<string, string> = {
  * to match the paper's layout.
  */
 export function buildMethodAverageOption(averages: MethodAverage[],
-                                         title = 'Figure 5 — Avg Precision / Recall') {
+                                         title = 'Web') {
   return {
     title: {
       text: title,

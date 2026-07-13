@@ -9,7 +9,7 @@ import { BenchmarkDescriptor } from '../../app.models';
  * Synthetic benchmark page (paper sec. 6.3.3): the 4 cases reconstructed from
  * Warren & Tompa (VLDB 2006) — UserID, Time, NameConcat, Citeseer. Generated
  * by scripts/synthetic_benchmark.py; all 8 sec. 6.2 methods are runnable, as
- * in the paper's Figure 9d. Mirrors the Benchmarks page, filtered to
+ * in the paper's Figure 5c. Mirrors the Benchmarks page, filtered to
  * synthetic-* fixtures.
  */
 @Component({
@@ -21,7 +21,7 @@ import { BenchmarkDescriptor } from '../../app.models';
 })
 export class SyntheticComponent implements OnInit {
   benchmarks: BenchmarkDescriptor[] = [];
-  // Paper Table 2 / Figure 9d evaluate the Synthetic benchmark without AJ-E.
+  // Paper Table 2 / Figure 5c evaluate the Synthetic benchmark without AJ-E.
   allMethods = ['AJ', 'SM', 'DQ-P', 'DQ-R', 'FJ-C', 'FJ-FR', 'FJ-O'];
   methods = [...this.allMethods, 'All'];
   selectedIds = new Set<string>();
