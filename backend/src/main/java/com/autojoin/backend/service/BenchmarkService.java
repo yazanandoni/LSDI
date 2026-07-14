@@ -85,7 +85,8 @@ public class BenchmarkService {
         this.dataRoot = Paths.get(root);
         this.fixtureRoots = List.of(
                 this.dataRoot.resolve("data/fixtures/web-benchmark"),
-                this.dataRoot.resolve("data/fixtures/dblp-scalability"));
+                this.dataRoot.resolve("data/fixtures/dblp-scalability"),
+                this.dataRoot.resolve("data/fixtures/synthetic"));
         this.fixtureLoaders = fixtureRoots.stream()
                 .map(BenchmarkFixtureLoader::new)
                 .toList();
@@ -145,14 +146,15 @@ public class BenchmarkService {
 
     public BenchmarkRunOutcome runBenchmark(String pairId, String method) throws IOException {
         // Paper sec. 6.2: FJ-O is an ORACLE — it picks the configuration with the
-        // highest average F across ALL web cases, using the ground truth. Resolve
-        // (and cache) that global config before the timer starts, so the one-time
-        // oracle search does not distort this run's measured time. DBLP runs keep
-        // the fixed-config standalone join: there FJ-O is only timed (sec. 6.4)
-        // and the config choice does not change the grid cost.
+        // highest average F across ALL cases of the benchmark being run, using
+        // the ground truth. Resolve (and cache) that global config before the
+        // timer starts, so the one-time oracle search does not distort this
+        // run's measured time. DBLP runs keep the fixed-config standalone join:
+        // there FJ-O is only timed (sec. 6.4) and the config choice does not
+        // change the grid cost.
         FuzzyJoinOracle.Config fjoConfig = null;
         if ("FJ-O".equals(method) && !pairId.startsWith("dblp-")) {
-            fjoConfig = oracleConfig();
+            fjoConfig = oracleConfig(pairId.startsWith("synthetic-"));
         }
 
         long start = System.currentTimeMillis();
@@ -259,18 +261,23 @@ public class BenchmarkService {
             csv, trace);
     }
 
-    /** Cached FJ-O oracle config; computed once from all web-benchmark cases. */
-    private volatile FuzzyJoinOracle.Config fjoOracleConfig;
+    /** Cached FJ-O oracle configs, one per quality benchmark (web / synthetic). */
+    private volatile FuzzyJoinOracle.Config fjoWebConfig;
+    private volatile FuzzyJoinOracle.Config fjoSyntheticConfig;
 
     /**
      * The paper's FJ-O oracle rule (sec. 6.2): evaluate all 520 configurations
-     * on every web-benchmark case and "report the best configuration that has
-     * the highest average F-score across all cases" — chosen with the ground
-     * truth, which is exactly why FJ-O is an upper bound and not a usable
-     * method. Runs once (a minute or two) and is cached for the process life.
+     * on every case of the benchmark being run and "report the best
+     * configuration that has the highest average F-score across all cases" —
+     * chosen with the ground truth, which is exactly why FJ-O is an upper
+     * bound and not a usable method. The config is picked PER BENCHMARK (web
+     * cases and synthetic cases each get their own), mirroring the paper's
+     * per-benchmark figures. Runs once per benchmark and is cached for the
+     * process life.
      */
-    private synchronized FuzzyJoinOracle.Config oracleConfig() throws IOException {
-        if (fjoOracleConfig != null) return fjoOracleConfig;
+    private synchronized FuzzyJoinOracle.Config oracleConfig(boolean synthetic) throws IOException {
+        FuzzyJoinOracle.Config cached = synthetic ? fjoSyntheticConfig : fjoWebConfig;
+        if (cached != null) return cached;
         long t0 = System.currentTimeMillis();
 
         List<FuzzyJoinOracle.CaseEval> evals = new ArrayList<>();
@@ -279,6 +286,7 @@ public class BenchmarkService {
         List<Map<String, List<String>>> gts = new ArrayList<>();
         for (BenchmarkDescriptor d : listBenchmarks()) {
             if (d.pairId().startsWith("dblp-")) continue;
+            if (d.pairId().startsWith("synthetic-") != synthetic) continue;
             BenchmarkFixture fx = loadFixture(d.pairId());
             Map<String, List<String>> gt = loadGroundTruth(
                     resolvePath(fx.ground_truth.file), fx.ground_truth.source_key_columns.size());
@@ -305,13 +313,15 @@ public class BenchmarkService {
                 best = cfg;
             }
         }
-        fjoOracleConfig = best != null
+        FuzzyJoinOracle.Config chosen = best != null
                 ? best
                 : new FuzzyJoinOracle.Config(FuzzyJoinOracle.Tok.WORD, FuzzyJoinOracle.Dist.JACCARD, 0.5);
-        System.out.println("FJ-O oracle config: " + fjoOracleConfig.label()
-                + String.format(java.util.Locale.US, " (avg F %.3f over %d web cases, chosen in %dms)",
-                        bestF, evals.size(), System.currentTimeMillis() - t0));
-        return fjoOracleConfig;
+        if (synthetic) fjoSyntheticConfig = chosen; else fjoWebConfig = chosen;
+        System.out.println("FJ-O oracle config: " + chosen.label()
+                + String.format(java.util.Locale.US, " (avg F %.3f over %d %s cases, chosen in %dms)",
+                        bestF, evals.size(), synthetic ? "synthetic" : "web",
+                        System.currentTimeMillis() - t0));
+        return chosen;
     }
 
     /** FJ-O pinned to the oracle-chosen configuration (still pays the full grid). */

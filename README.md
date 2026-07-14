@@ -55,6 +55,7 @@ The navigation bar has these pages:
 | **Dashboard** | Overview and entry point. |
 | **Benchmarks** | The 31 Web-benchmark table pairs. Pick a pair and a method (or "All") and run it — or run *everything* with one button to fill the Figure-5 chart. |
 | **DBLP** | The scalability tables (100 to 1M rows). Only the methods the paper times here (AJ, SM, FJ-C, FJ-O). Big sizes can take minutes; slow baselines are cut off by a timeout, just like in the paper. |
+| **Synthetic** | The paper's 4 synthetic cases (UserID, Time, NameConcat, Citeseer — §6.3.3), reconstructed by `scripts/synthetic_benchmark.py`. All 8 methods runnable; results feed a Figure-5c-style chart on the Results page. |
 | **Scalability** | Running-time chart in the style of the paper's Figure 8 (AutoJoin's stages stacked, baselines as lines, timeouts marked). Downloadable as PNG. |
 | **Results** | Every run you've done: precision, recall, mismatch samples, CSV download, and the Figure-5-style averages chart. From here you can open the **Trace** view of a run to see the algorithm work step by step. |
 

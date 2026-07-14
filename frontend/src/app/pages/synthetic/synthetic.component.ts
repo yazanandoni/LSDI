@@ -1,25 +1,32 @@
 import { Component, OnInit } from '@angular/core';
 import { NgFor, NgIf } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
-import { BenchmarkService, SystemInfo } from '../../services/benchmark.service';
+import { BenchmarkService } from '../../services/benchmark.service';
 import { BenchmarkDescriptor } from '../../app.models';
 
+/**
+ * Synthetic benchmark page (paper sec. 6.3.3): the 4 cases reconstructed from
+ * Warren & Tompa (VLDB 2006) — UserID, Time, NameConcat, Citeseer. Generated
+ * by scripts/synthetic_benchmark.py; runnable with the method set the paper
+ * evaluates here (Figure 5c / Table 2 — no AJ-E). Mirrors the Benchmarks
+ * page, filtered to synthetic-* fixtures.
+ */
 @Component({
-  selector: 'app-dblp',
+  selector: 'app-synthetic',
   standalone: true,
   imports: [RouterLink, NgFor, NgIf],
-  templateUrl: './dblp.component.html',
-  styleUrl: './dblp.component.scss'
+  templateUrl: './synthetic.component.html',
+  styleUrl: '../benchmarks/benchmarks.component.scss'
 })
-export class DblpComponent implements OnInit {
+export class SyntheticComponent implements OnInit {
   benchmarks: BenchmarkDescriptor[] = [];
-  methods = ['AJ', 'SM', 'FJ-C', 'FJ-O', 'All'];
-  allMethods = ['AJ', 'SM', 'FJ-C', 'FJ-O'];
+  // Paper Table 2 / Figure 5c evaluate the Synthetic benchmark without AJ-E.
+  allMethods = ['AJ', 'SM', 'DQ-P', 'DQ-R', 'FJ-C', 'FJ-FR', 'FJ-O'];
+  methods = [...this.allMethods, 'All'];
   selectedIds = new Set<string>();
   methodMap = new Map<string, string>();
   running = false;
   statusMessage = '';
-  systemInfo?: SystemInfo;
 
   constructor(
     private benchmarkService: BenchmarkService,
@@ -28,15 +35,8 @@ export class DblpComponent implements OnInit {
 
   ngOnInit(): void {
     this.benchmarkService.listBenchmarks().subscribe((benchmarks) => {
-      this.benchmarks = benchmarks.filter(b => b.pairId.startsWith('dblp-'));
+      this.benchmarks = benchmarks.filter(b => b.pairId.startsWith('synthetic-'));
     });
-    this.benchmarkService.getSystemInfo().subscribe((info) => (this.systemInfo = info));
-  }
-
-  get heapGb(): string {
-    return this.systemInfo
-      ? (this.systemInfo.maxHeapBytes / (1024 * 1024 * 1024)).toFixed(1)
-      : '?';
   }
 
   getMethod(pairId: string): string {
@@ -55,6 +55,16 @@ export class DblpComponent implements OnInit {
     }
   }
 
+  runAllMethods(): void {
+    const runs: { pairId: string; method: string }[] = [];
+    for (const b of this.benchmarks) {
+      for (const m of this.allMethods) {
+        runs.push({ pairId: b.pairId, method: m });
+      }
+    }
+    this.runQueue(runs);
+  }
+
   runSelected(): void {
     const runs: { pairId: string; method: string }[] = [];
     for (const id of this.selectedIds) {
@@ -71,9 +81,6 @@ export class DblpComponent implements OnInit {
     this.runQueue(methods.map((m) => ({ pairId, method: m })));
   }
 
-  // Runs execute sequentially via the async job API (start + poll) so no HTTP
-  // connection is held open for the duration of a run — long runs otherwise
-  // die at the browser's connection limit ("status 0 Unknown Error").
   private runQueue(runs: { pairId: string; method: string }[]): void {
     if (runs.length === 0) return;
     this.running = true;

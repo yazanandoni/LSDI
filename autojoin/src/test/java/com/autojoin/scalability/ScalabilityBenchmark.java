@@ -1,7 +1,6 @@
 package com.autojoin.scalability;
 
 import com.autojoin.AutoJoin;
-import com.autojoin.JoinResult;
 import com.autojoin.baselines.FuzzyJoinColumn;
 import com.autojoin.baselines.FuzzyJoinOracle;
 import com.autojoin.baselines.JoinMethod;

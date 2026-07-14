@@ -6,6 +6,7 @@ import com.autojoin.model.Table;
 import com.autojoin.q_gram.ColumnSuffixIndex;
 import com.autojoin.q_gram.MatchResult;
 import com.autojoin.q_gram.QGramFinder;
+import com.autojoin.sampling.Sample;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -24,9 +25,12 @@ import java.util.concurrent.CancellationException;
  * These are sub-components of Auto-Join itself: the same §3.1 optimal-q-gram
  * search ({@link QGramFinder} over {@link ColumnSuffixIndex}) that AJ uses to
  * collect transformation examples, except its row pairs ARE the output — no
- * transformation is learned and no fuzzy join runs. Unlike AJ the search runs
- * on the full tables (not the §4 sample), since every emitted pair must come
- * from a real match.
+ * transformation is learned and no fuzzy join runs. "Matches produced in
+ * Section 3.1" are what AJ's pipeline materializes, and that pipeline runs
+ * discovery on the §4 row samples (paper parameters t=4, δ=0.8, r=0.1;
+ * small tables where the required rate reaches 1 stay whole) — so DQ samples
+ * identically. Emitted pairs are therefore capped by sample participation on
+ * large cases, exactly like the paper's DQ numbers.
  *
  * The two variants differ only in which matches are admitted:
  * <ul>
@@ -62,8 +66,14 @@ public final class DynamicQGram implements JoinMethod {
     public List<Row[]> join(JoinInput in) {
         QGramFinder finder = new QGramFinder();
 
+        // §4: discovery runs on row samples with the paper's parameters, the
+        // same call AJ's tryDirection makes before finding joinable row pairs.
+        Sample.SampleResult sampled = Sample.sampleTables(in.source, in.target, 4, 0.8, 0.1);
+        Table source = sampled.sourceSample();
+        Table target = sampled.targetSample();
+
         // Index each target key column once (index construction dominates).
-        List<Column> targetKeyColumns = in.target.getKeyColumns();
+        List<Column> targetKeyColumns = target.getKeyColumns();
         List<ColumnSuffixIndex> targetIndexes = new ArrayList<>(targetKeyColumns.size());
         for (Column ct : targetKeyColumns) {
             targetIndexes.add(new ColumnSuffixIndex(ct.getValues()));
@@ -71,7 +81,7 @@ public final class DynamicQGram implements JoinMethod {
 
         Set<Long> seen = new HashSet<>();
         List<Row[]> pairs = new ArrayList<>();
-        for (Column cs : in.source.getColumns()) {
+        for (Column cs : source.getColumns()) {
             ColumnSuffixIndex sourceIdx = new ColumnSuffixIndex(cs.getValues());
             Set<String> distinctValues = new HashSet<>(cs.getValues());
             for (ColumnSuffixIndex targetIdx : targetIndexes) {
@@ -91,7 +101,7 @@ public final class DynamicQGram implements JoinMethod {
                     for (int srcRow : m.getBestSourceRows()) {
                         long key = ((long) srcRow << 32) | (tgtRow & 0xffffffffL);
                         if (seen.add(key)) {
-                            pairs.add(new Row[]{in.source.getRow(srcRow), in.target.getRow(tgtRow)});
+                            pairs.add(new Row[]{source.getRow(srcRow), target.getRow(tgtRow)});
                         }
                     }
                 }

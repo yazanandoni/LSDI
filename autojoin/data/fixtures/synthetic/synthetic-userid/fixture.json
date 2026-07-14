@@ -1,0 +1,27 @@
+{
+  "pair_id": "synthetic-userid",
+  "source": {
+    "file": "data/raw/synthetic/userid/source.csv",
+    "key_columns": [
+      "first",
+      "last"
+    ]
+  },
+  "target": {
+    "file": "data/raw/synthetic/userid/target.csv",
+    "key_columns": [
+      "login"
+    ]
+  },
+  "ground_truth": {
+    "file": "data/raw/synthetic/userid/ground_truth.csv",
+    "format": "row_values",
+    "source_key_columns": [
+      "first",
+      "last"
+    ],
+    "target_key_columns": [
+      "login"
+    ]
+  }
+}

@@ -290,7 +290,7 @@ export class ScalabilityComponent implements OnInit, OnDestroy {
 
     return {
       title: {
-        text: 'Figure 8 — Running Time vs Table Size',
+        text: 'DBLP',
         left: 'center',
         top: 8,
         textStyle: { fontFamily: 'Space Grotesk', fontSize: 14 }

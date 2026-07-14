@@ -151,13 +151,18 @@ public final class FuzzyJoinOracle implements JoinMethod {
         }
 
         /** Top-1 joined pairs under {@code cfg}: each source row joins its closest
-         *  target when that distance is within the threshold. */
+         *  target when that distance is within the threshold. INTERSECT is ref
+         *  [17]'s raw intersection COUNT, so its 10 "equally-distanced" threshold
+         *  values are the counts 1..10 (distance is encoded as 1/(1+count)). */
         public List<Row[]> pairsAt(Config cfg) {
             int[] idx = bestIdx[cfg.tok.ordinal()][cfg.dist.ordinal()];
             double[] dst = bestDist[cfg.tok.ordinal()][cfg.dist.ordinal()];
+            double cutoff = cfg.dist == Dist.INTERSECT
+                    ? 1.0 / (1.0 + Math.round(cfg.threshold * 10)) + 1e-12
+                    : cfg.threshold;
             List<Row[]> pairs = new ArrayList<>();
             for (int i = 0; i < idx.length; i++) {
-                if (idx[i] >= 0 && dst[i] <= cfg.threshold) {
+                if (idx[i] >= 0 && dst[i] <= cutoff) {
                     pairs.add(new Row[]{in.source.getRow(i), in.target.getRow(idx[i])});
                 }
             }
@@ -177,23 +182,43 @@ public final class FuzzyJoinOracle implements JoinMethod {
         return out;
     }
 
+    /**
+     * The lexical analyzers of ref [17] (Hassanzadeh et al., "Discovering
+     * linkage points over web data", PVLDB 2013 — the paper AutoJoin's sec. 6.2
+     * cites for this tokenization space), implemented as defined there:
+     * "Exact... does not make any change to the string. Lower... turns the
+     * string value into lowercase. Split... breaks the string into a set of
+     * tokens by splitting them by whitespace after using the lower analyzer
+     * (IBM Corp. -> ibm, corp.). Word token... first replaces all the
+     * non-alphanumeric characters with whitespace and then uses the split
+     * tokenizer (http://ibm.com -> http, ibm, com). The q-gram analyzer
+     * tokenizes the string into the set of all lowercase substrings of length
+     * q. It also replaces all whitespaces with q-1 occurrences of a special
+     * character such as $" — and, per its worked example ($$i, $ib, ibm, ...),
+     * pads both ends of the string with q-1 of them too.
+     */
     private static Set<String> tokenize(String s, Tok tok) {
         Set<String> set = new HashSet<>();
         switch (tok) {
             case EXACT: set.add(s); return set;
             case LOWER: set.add(s.toLowerCase()); return set;
             case SPLIT:
-                for (String p : s.toLowerCase().split("[^\\p{Alnum}]+"))
+                for (String p : s.toLowerCase().split("\\s+"))
                     if (!p.isEmpty()) set.add(p);
                 return set;
             case WORD:
-                for (String w : s.trim().split("\\s+"))
+                for (String w : s.toLowerCase().replaceAll("[^\\p{Alnum}]+", " ").split("\\s+"))
                     if (!w.isEmpty()) set.add(w);
                 return set;
             default:
                 int q = qOf(tok);
-                if (s.length() < q) { set.add(s); return set; }
-                for (int i = 0; i <= s.length() - q; i++) set.add(s.substring(i, i + q));
+                String pad = "$".repeat(q - 1);
+                // NB: replaceAll's replacement treats '$' as a group reference,
+                // so the padding must be inserted literally.
+                String t = pad + s.toLowerCase().replaceAll("\\s",
+                        java.util.regex.Matcher.quoteReplacement(pad)) + pad;
+                if (t.length() < q) { set.add(t); return set; }
+                for (int i = 0; i <= t.length() - q; i++) set.add(t.substring(i, i + q));
                 return set;
         }
     }
@@ -206,7 +231,15 @@ public final class FuzzyJoinOracle implements JoinMethod {
         }
     }
 
-    /** Distance in [0,1]; 0 = identical token sets, 1 = disjoint. */
+    /**
+     * The similarity functions of ref [17] (Eqs. 4-7), expressed as distances
+     * so that smaller = closer: jaccard = |∩|/|∪|, dice = 2|∩|/(|V1|+|V2|),
+     * maxinc = |∩|/min(|V1|,|V2|) ("the maximum inclusion degree of one value
+     * set in another") — each mapped to 1 - similarity — and intersect = |∩|
+     * (the raw intersection size), mapped to 1/(1+|∩|) so its ordering is
+     * monotone; {@link CaseEval#pairsAt} translates INTERSECT thresholds into
+     * the counts 1..10.
+     */
     private static double distance(Set<String> a, Set<String> b, Dist dist) {
         if (a.isEmpty() && b.isEmpty()) return 0.0;
         if (a.isEmpty() || b.isEmpty()) return 1.0;
@@ -217,8 +250,8 @@ public final class FuzzyJoinOracle implements JoinMethod {
         switch (dist) {
             case JACCARD:      return 1.0 - (double) inter / (a.size() + b.size() - inter);
             case DICE:         return 1.0 - 2.0 * inter / (a.size() + b.size());
-            case INTERSECT:    return 1.0 - (double) inter / Math.min(a.size(), b.size());
-            case MAXINCLUSION: return 1.0 - (double) inter / Math.max(a.size(), b.size());
+            case MAXINCLUSION: return 1.0 - (double) inter / Math.min(a.size(), b.size());
+            case INTERSECT:    return 1.0 / (1.0 + inter);
             default:           return 1.0;
         }
     }
