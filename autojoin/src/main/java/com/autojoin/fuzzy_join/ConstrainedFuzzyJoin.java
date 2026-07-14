@@ -180,8 +180,7 @@ public class ConstrainedFuzzyJoin {
             return new RecoveryOutcome(List.of(), 0.0);
         }
 
-        // Constraint 2 relaxed for recovery — see satisfiesConstraints.
-        double threshold = model.findOptimalThreshold(false);
+        double threshold = model.findOptimalThreshold();
         if (threshold <= 0.0) return new RecoveryOutcome(List.of(), 0.0);
 
         List<FuzzyJoinResult> recovered = new ArrayList<>();
@@ -208,17 +207,6 @@ public class ConstrainedFuzzyJoin {
             }
         }
         return new RecoveryOutcome(recovered, threshold);
-    }
-
-    /**
-     * Finds the optimal (maximum) distance threshold that satisfies the join constraints.
-     *
-     * @param transformedSourceColumn The source column AFTER learned transformation is applied (C)
-     * @param targetKeyColumn         The original target key column (K)
-     * @return The maximum safe distance threshold [0.0, 1.0]
-     */
-    public double findOptimalThreshold(List<String> transformedSourceColumn, List<String> targetKeyColumn) {
-        return new DistanceModel(transformedSourceColumn, targetKeyColumn).findOptimalThreshold(true);
     }
 
     /**
@@ -338,8 +326,8 @@ public class ConstrainedFuzzyJoin {
             return first;
         }
 
-        /** Binary search for the loosest threshold that keeps the constraints. */
-        double findOptimalThreshold(boolean enforceDistinctSourceConstraint) {
+        /** Binary search for the loosest threshold that keeps the constraint. */
+        double findOptimalThreshold() {
             double low = 0.0;
             double high = 1.0;
             double optimalThreshold = 0.0;
@@ -347,7 +335,7 @@ public class ConstrainedFuzzyJoin {
             while ((high - low) > EPSILON) {
                 double mid = low + (high - low) / 2.0;
 
-                if (satisfiesConstraints(mid, enforceDistinctSourceConstraint)) {
+                if (satisfiesConstraints(mid)) {
                     // store found threshold and update lower bound to continue search
                     optimalThreshold = mid;
                     low = mid;
@@ -360,12 +348,17 @@ public class ConstrainedFuzzyJoin {
         }
 
         /**
-         * Checks if a given threshold respects the 1:1 or N:1 key constraints.
+         * Checks if a given threshold respects the mandatory cardinality
+         * constraint: every value in C matches at most 1 target ROW (1:1 or
+         * N:1). Duplicate target key values count per row, so a duplicated key
+         * still trips the constraint. The paper's OPTIONAL second constraint
+         * (each target joined by at most one distinct source value) is NOT
+         * checked all-pairs here — on columns full of similarly-formatted
+         * values it collapses the threshold to ~0; the recovery pass enforces
+         * it through single-closest emission instead, and the standalone FJ-C
+         * path checks it on its emitted top-1 matches (topOneSatisfies).
          */
-        private boolean satisfiesConstraints(double threshold, boolean enforceDistinctSourceConstraint) {
-            // Constraint 1: Every value in C matches <= 1 target ROW -> ensuring
-            // 1:1 or N:1 relationship. Duplicate target key values count per row,
-            // so a duplicated key still trips the constraint.
+        private boolean satisfiesConstraints(double threshold) {
             for (int ci = 0; ci < sourceValues.size(); ci++) {
                 checkCancelled();
                 int matchCount = 0;
@@ -373,28 +366,6 @@ public class ConstrainedFuzzyJoin {
                     if (distance(ci, ki) <= threshold) {
                         matchCount += targetValueRowCount[ki];
                         if (matchCount > 1) return false;
-                    }
-                }
-            }
-
-            // Constraint 2 (paper: OPTIONAL — "every value in K matches <= 1
-            // DISTINCT value in C"). Enforced for the standalone executeJoin
-            // API, but NOT for the recovery pass: on columns full of
-            // similarly-formatted values (e.g. 75 "The Earl of X"
-            // prime-minister names) two distinct source values almost always
-            // sit near some shared target, which collapses the optimal
-            // threshold to ~0 and disables recovery entirely — the paper's
-            // ~0.11 recall gain from fuzzy join never materializes. Recovery
-            // precision is still protected by constraint 1 plus the recovery
-            // rules (unmatched rows only, single closest match per row).
-            if (enforceDistinctSourceConstraint) {
-                for (int ki = 0; ki < targetValues.size(); ki++) {
-                    checkCancelled();
-                    int distinctSourceMatches = 0;
-                    for (int ci = 0; ci < sourceValues.size(); ci++) {
-                        if (distance(ci, ki) <= threshold) {
-                            if (++distinctSourceMatches > 1) return false;
-                        }
                     }
                 }
             }

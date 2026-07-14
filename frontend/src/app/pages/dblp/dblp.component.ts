@@ -1,14 +1,13 @@
 import { Component, OnInit } from '@angular/core';
 import { NgFor, NgIf } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
-import { FormsModule } from '@angular/forms';
 import { BenchmarkService, SystemInfo } from '../../services/benchmark.service';
 import { BenchmarkDescriptor } from '../../app.models';
 
 @Component({
   selector: 'app-dblp',
   standalone: true,
-  imports: [RouterLink, NgFor, NgIf, FormsModule],
+  imports: [RouterLink, NgFor, NgIf],
   templateUrl: './dblp.component.html',
   styleUrl: './dblp.component.scss'
 })

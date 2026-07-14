@@ -1,21 +1,20 @@
 import { Component, OnInit } from '@angular/core';
 import { NgFor, NgIf } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
-import { FormsModule } from '@angular/forms';
 import { BenchmarkService } from '../../services/benchmark.service';
 import { BenchmarkDescriptor } from '../../app.models';
 
 /**
  * Synthetic benchmark page (paper sec. 6.3.3): the 4 cases reconstructed from
  * Warren & Tompa (VLDB 2006) — UserID, Time, NameConcat, Citeseer. Generated
- * by scripts/synthetic_benchmark.py; all 8 sec. 6.2 methods are runnable, as
- * in the paper's Figure 5c. Mirrors the Benchmarks page, filtered to
- * synthetic-* fixtures.
+ * by scripts/synthetic_benchmark.py; runnable with the method set the paper
+ * evaluates here (Figure 5c / Table 2 — no AJ-E). Mirrors the Benchmarks
+ * page, filtered to synthetic-* fixtures.
  */
 @Component({
   selector: 'app-synthetic',
   standalone: true,
-  imports: [RouterLink, NgFor, NgIf, FormsModule],
+  imports: [RouterLink, NgFor, NgIf],
   templateUrl: './synthetic.component.html',
   styleUrl: '../benchmarks/benchmarks.component.scss'
 })
