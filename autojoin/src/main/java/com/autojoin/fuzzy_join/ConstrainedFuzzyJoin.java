@@ -97,6 +97,9 @@ public class ConstrainedFuzzyJoin {
                                            boolean[] sourceMatched,
                                            boolean[] targetMatched) {
         RecoveryOutcome best = new RecoveryOutcome(List.of(), 0.0);
+        if (countDistinct(transformedSourceColumn) * countDistinct(targetKeyColumn) > MAX_RECOVERY_PAIRS) {
+            return best;
+        }
         for (Tokenization tok : RECOVERY_SWEEP) {
             RecoveryOutcome outcome = recoverWith(tok, transformedSourceColumn,
                     targetKeyColumn, sourceMatched, targetMatched);
@@ -113,10 +116,6 @@ public class ConstrainedFuzzyJoin {
                                         boolean[] sourceMatched,
                                         boolean[] targetMatched) {
         DistanceModel model = new DistanceModel(transformedSourceColumn, targetKeyColumn, tok);
-        if ((long) model.numSourceValues() * model.numTargetValues() > MAX_RECOVERY_PAIRS) {
-            return new RecoveryOutcome(List.of(), 0.0);
-        }
-
         double threshold = model.findOptimalThreshold();
         if (threshold <= 0.0) return new RecoveryOutcome(List.of(), 0.0);
 
@@ -307,6 +306,21 @@ public class ConstrainedFuzzyJoin {
             }
             return idx;
         }
+    }
+
+    /**
+     * Number of distinct non-null values in a column — the same count the
+     * DistanceModel would produce. Used to apply the MAX_RECOVERY_PAIRS guard
+     * BEFORE a model is built: constructing one tokenizes every distinct value
+     * of both full columns, which on million-row tables allocates tens of GB
+     * only for the guard to then discard the pass entirely.
+     */
+    private static long countDistinct(List<String> column) {
+        Set<String> seen = new HashSet<>();
+        for (String v : column) {
+            if (v != null) seen.add(v);
+        }
+        return seen.size();
     }
 
     private static double jaccardDistance(String stringA, String stringB,
