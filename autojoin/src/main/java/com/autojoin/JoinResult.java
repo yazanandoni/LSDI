@@ -8,7 +8,6 @@ import java.util.List;
 
 public class JoinResult {
 
-    /** Each element is a pair [sourceRow, targetRow]. */
     private final List<Row[]> joinedPairs;
     private final String transformationDescription;
     private final AlgorithmTrace trace;

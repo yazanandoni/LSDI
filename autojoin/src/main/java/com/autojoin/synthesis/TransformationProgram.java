@@ -5,12 +5,6 @@ import com.autojoin.operator.LogicalOperator;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * A transformation program is an ordered list of logical operators whose
- * outputs are concatenated (via implicit Concat) to produce the final string.
- *
- * This corresponds to Definition 4 in the paper: P = θ1 · θ2 · … · θn.
- */
 public class TransformationProgram {
 
     private final List<LogicalOperator> operators;
@@ -19,10 +13,6 @@ public class TransformationProgram {
         this.operators = List.copyOf(operators);
     }
 
-    /**
-     * Apply the program to a source row, returning the concatenated output of
-     * all operators, or null if any operator throws.
-     */
     public String apply(String[] row) {
         StringBuilder sb = new StringBuilder();
         for (LogicalOperator op : operators) {
@@ -37,7 +27,6 @@ public class TransformationProgram {
         return sb.toString();
     }
 
-    /** Number of logical operators — used as the complexity measure (Definition 4). */
     public int complexity() {
         return operators.size();
     }

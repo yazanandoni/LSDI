@@ -11,14 +11,6 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * Paper §3.3 end-to-end. Both key columns are composite, with DIFFERENT extra
- * fields (party on the left, life span on the right), so neither join direction
- * can reproduce the other side's full composite key — the party is absent from
- * the right, the life span absent from the left. Only after the composite keys
- * are split into component sub-columns can the name parts be transformation-
- * joined. A success here therefore exercises the §3.3 split-and-retry path.
- */
 class CompositeKeyJoinTest {
 
     @Test
@@ -53,7 +45,6 @@ class CompositeKeyJoinTest {
         assertTrue(obamaPaired, "the Obama rows should be correctly aligned across the two tables");
     }
 
-    /** Read a column value from whichever side of the joined pair has it. */
     private static String valueOf(Row[] pair, String column) {
         for (Row r : pair) {
             String v = r.get(column);

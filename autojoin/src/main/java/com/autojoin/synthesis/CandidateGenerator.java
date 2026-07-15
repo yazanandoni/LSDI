@@ -4,48 +4,19 @@ import com.autojoin.operator.*;
 
 import java.util.*;
 
-/**
- * Enumerates every LogicalOperator instance that produces a non-empty string
- * that appears in the target value for ALL provided examples.
- *
- * Candidates are returned sorted by total coverage score (sum of result
- * lengths across all examples), descending — so the synthesiser tries the
- * most-promising operator first.
- *
- * Pruning follows Appendix G of the paper:
- *  - Separators are restricted to non-alphanumeric substrings actually present
- *    in the source strings.
- *  - Casing variants whose output cannot match the current target are skipped.
- *  - Length=-1 ("to end") is always tried in addition to fixed lengths.
- */
 final class CandidateGenerator {
 
     private CandidateGenerator() {}
 
-    /**
-     * Bounds on candidate enumeration. Without these, generate() is
-     * O(seps1·parts1·seps2·parts2·len²·casings) per call and explodes on long,
-     * separator-rich source fields (e.g. a 90-char "Songwriter(s)" value with
-     * ~30 separators), costing seconds per search node. Real join-key
-     * transformations use a handful of separators, low part indices, and short
-     * extracted components, so these caps do not affect them.
-     */
     private static final int MAX_SEPARATORS = 8;
     private static final int MAX_SPLIT_PARTS = 8;
     private static final int MAX_SUBSTR_LEN = 40;
-
-    // -------------------------------------------------------------------------
-    // Public entry point
-    // -------------------------------------------------------------------------
 
     static List<LogicalOperator> generate(List<ExamplePair> examples) {
         if (examples.isEmpty()) return List.of();
 
         List<ScoredOp> candidates = new ArrayList<>();
 
-        // Appendix G casing pruning: only enumerate casings whose output could
-        // appear in the targets. Computed once and shared by all Substr-family
-        // generators.
         Set<Casing> casings = usefulCasings(examples);
 
         addConstantCandidates(examples, candidates);
@@ -53,14 +24,12 @@ final class CandidateGenerator {
         addSplitSubstrCandidates(examples, candidates, casings);
         addSplitSplitSubstrCandidates(examples, candidates, casings);
 
-        // Deduplicate by result fingerprint, keeping highest score
         Map<String, ScoredOp> deduped = new LinkedHashMap<>();
         for (ScoredOp s : candidates) {
             String key = fingerprint(s.op, examples);
             deduped.merge(key, s, (a, b) -> a.score >= b.score ? a : b);
         }
 
-        // Sort descending by score
         List<ScoredOp> sorted = new ArrayList<>(deduped.values());
         sorted.sort((a, b) -> Integer.compare(b.score, a.score));
 
@@ -69,21 +38,16 @@ final class CandidateGenerator {
         return result;
     }
 
-    // -------------------------------------------------------------------------
-    // Constant candidates
-    // -------------------------------------------------------------------------
 
     private static void addConstantCandidates(List<ExamplePair> examples,
                                                List<ScoredOp> out) {
-        // Enumerate substrings of the first target that appear in ALL targets.
-        // Limit to length 1-5 to avoid combinatorial explosion.
         String target0 = examples.get(0).targetValue;
         int maxLen = Math.min(target0.length(), 5);
 
         for (int start = 0; start < target0.length(); start++) {
             for (int len = 1; len <= maxLen && start + len <= target0.length(); len++) {
                 String constant = target0.substring(start, start + len);
-                if (constant.isBlank() && len > 2) continue; // skip long whitespace
+                if (constant.isBlank() && len > 2) continue;
                 boolean allContain = examples.stream()
                         .allMatch(ex -> ex.targetValue.contains(constant));
                 if (allContain) {
@@ -95,16 +59,12 @@ final class CandidateGenerator {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Substr candidates
-    // -------------------------------------------------------------------------
 
     private static void addSubstrCandidates(List<ExamplePair> examples,
                                              List<ScoredOp> out, Set<Casing> casings) {
         int numCols = examples.get(0).sourceRow.length;
 
         for (int k = 0; k < numCols; k++) {
-            // Get element at column k for each example
             List<String> elems = elementsAt(examples, k);
             if (elems == null) continue;
 
@@ -116,11 +76,6 @@ final class CandidateGenerator {
 
     private static void enumerateSubstrOps(int k, List<String> elems, Casing casing,
                                             List<ExamplePair> examples, List<ScoredOp> out) {
-        // start must stay below the SHORTEST example (beyond it the output is
-        // empty on that example and validity fails); fixed lengths run up
-        // to the LONGEST example so truncation points on longer examples are
-        // reachable. Lengths beyond every example clamp to identical outputs
-        // and collapse in the fingerprint dedupe.
         int minLen = minLength(elems);
 
         for (int start = 0; start < minLen; start++) {
@@ -130,33 +85,16 @@ final class CandidateGenerator {
         }
     }
 
-    /**
-     * Emit every valid fixed-length op for one (elements, start, casing)
-     * combination, plus the take-to-end (len = -1) variant.
-     *
-     * Validity is MONOTONE in length: each example's output for len is a
-     * prefix of its output for len+1 (clamped at the element end, and all
-     * casings map prefixes to prefixes), and a substring of a string contained
-     * in the target is itself contained. So the valid lengths form a prefix
-     * range [1..Lmax], and Lmax is found with ~log2(MAX_SUBSTR_LEN)
-     * containment probes by binary search instead of validating each length
-     * individually — per-node candidate generation cost was the dominant
-     * synthesis cost on wide tables (Appendix G: "physical optimizations are
-     * performed to only test meaningful parameters"). The emitted candidates,
-     * scores, and insertion order are identical to exhaustive validation.
-     */
     private static void emitSubstrRange(List<String> elems, int start, Casing casing,
                                         List<ExamplePair> examples,
                                         java.util.function.IntFunction<LogicalOperator> opForLen,
                                         List<ScoredOp> out) {
-        // length = -1 (take to end): each example's full cased tail.
         if (validAt(elems, examples, start, Integer.MAX_VALUE, casing)) {
             int score = 0;
             for (String e : elems) score += e.length() - start;
             out.add(new ScoredOp(opForLen.apply(-1), score));
         }
 
-        // Binary search the largest valid fixed length in [1..bound].
         int bound = Math.min(maxLength(elems) - start, MAX_SUBSTR_LEN);
         int lo = 0, hi = bound;
         while (lo < hi) {
@@ -174,9 +112,6 @@ final class CandidateGenerator {
         }
     }
 
-    /** True when, for every example, the cased substring [start, start+len)
-     *  of its element (clamped to the element end) is non-empty and contained
-     *  in its target — exactly addIfValid's criterion for the Substr family. */
     private static boolean validAt(List<String> elems, List<ExamplePair> examples,
                                    int start, int len, Casing casing) {
         for (int i = 0; i < elems.size(); i++) {
@@ -189,9 +124,6 @@ final class CandidateGenerator {
         return true;
     }
 
-    // -------------------------------------------------------------------------
-    // SplitSubstr candidates
-    // -------------------------------------------------------------------------
 
     private static void addSplitSubstrCandidates(List<ExamplePair> examples,
                                                    List<ScoredOp> out, Set<Casing> casings) {
@@ -203,7 +135,6 @@ final class CandidateGenerator {
 
             Set<String> seps = extractSeparators(elems);
             for (String sep : seps) {
-                // Determine max number of parts across all examples after splitting
                 int maxParts = Math.min(maxParts(elems, sep), MAX_SPLIT_PARTS);
                 if (maxParts < 2) continue;
 
@@ -231,9 +162,6 @@ final class CandidateGenerator {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // SplitSplitSubstr candidates
-    // -------------------------------------------------------------------------
 
     private static void addSplitSplitSubstrCandidates(List<ExamplePair> examples,
                                                         List<ScoredOp> out, Set<Casing> casings) {
@@ -287,12 +215,7 @@ final class CandidateGenerator {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Helpers
-    // -------------------------------------------------------------------------
 
-    /** Try the operator; if it produces a non-empty result in every example's
-     *  target, add it with its total-coverage score. */
     static void addIfValid(LogicalOperator op, List<ExamplePair> examples,
                             List<ScoredOp> out) {
         int total = 0;
@@ -310,7 +233,6 @@ final class CandidateGenerator {
         out.add(new ScoredOp(op, total));
     }
 
-    /** A fingerprint that identifies what an operator produces on all examples. */
     private static String fingerprint(LogicalOperator op, List<ExamplePair> examples) {
         StringBuilder sb = new StringBuilder();
         for (ExamplePair ex : examples) {
@@ -324,17 +246,6 @@ final class CandidateGenerator {
         return sb.toString();
     }
 
-    /**
-     * Appendix G casing pruning: return only the casings that could possibly
-     * produce a substring of the example targets, so incompatible casings are
-     * never enumerated. NONE (identity) is always kept. A casing that introduces
-     * uppercase (UPPER, TITLE) is useless if no target contains an uppercase
-     * letter, and LOWER is useless if no target contains a lowercase letter —
-     * in those cases the only inputs they could match are letter-free, where the
-     * output equals NONE's and is already covered. Pruning is over the union of
-     * all example targets, so a casing is dropped only when provably useless for
-     * every example (never losing a valid candidate).
-     */
     private static Set<Casing> usefulCasings(List<ExamplePair> examples) {
         boolean hasUpper = false, hasLower = false;
         for (ExamplePair ex : examples) {
@@ -364,7 +275,6 @@ final class CandidateGenerator {
         return max;
     }
 
-    /** Get the value at column k for each example row; null if any row is too short. */
     private static List<String> elementsAt(List<ExamplePair> examples, int k) {
         List<String> result = new ArrayList<>(examples.size());
         for (ExamplePair ex : examples) {
@@ -374,7 +284,6 @@ final class CandidateGenerator {
         return result;
     }
 
-    /** Split each elem by sep and return the m-th part; null if any elem lacks that part. */
     private static List<String> splitElems(List<String> elems, String sep, int m) {
         List<String> result = new ArrayList<>(elems.size());
         for (String elem : elems) {
@@ -386,7 +295,6 @@ final class CandidateGenerator {
         return result;
     }
 
-    /** Maximum number of parts any elem has when split by sep. */
     private static int maxParts(List<String> elems, String sep) {
         int max = 0;
         for (String elem : elems) {
@@ -395,14 +303,7 @@ final class CandidateGenerator {
         return max;
     }
 
-    /**
-     * Extract candidate separators: single or double non-alphanumeric character
-     * sequences that appear in the source strings (Appendix G).
-     */
     static Set<String> extractSeparators(List<String> elems) {
-        // Single-char separators are the most useful, so collect them first and
-        // only fall back to 2-char sequences to fill the budget. This keeps the
-        // set small on separator-rich text without losing the common cases.
         Set<String> singles = new LinkedHashSet<>();
         Set<String> doubles = new LinkedHashSet<>();
         for (String elem : elems) {
@@ -428,9 +329,6 @@ final class CandidateGenerator {
         return seps;
     }
 
-    // -------------------------------------------------------------------------
-    // Internal record
-    // -------------------------------------------------------------------------
 
     static final class ScoredOp {
         final LogicalOperator op;

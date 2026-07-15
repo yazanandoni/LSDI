@@ -13,10 +13,6 @@ public class Table {
 
     private final String name;
     private final List<Column> columns;
-    // One immutable column-name list, shared by every Row this table hands out
-    // (see getRow). Previously each getRow re-derived it via a stream and Row
-    // then copied it again — for a million-row scan that is a million redundant
-    // list allocations of identical content.
     private final List<String> columnNames;
 
     public Table(String name, List<Column> columns) {
@@ -56,8 +52,6 @@ public class Table {
     public Row getRow(int index) {
         List<String> values = new ArrayList<>(columns.size());
         for (Column c : columns) values.add(c.getValue(index));
-        // Share the table-wide column-name list; the fresh values list is only
-        // referenced by this Row, so it is safe to hand over without a copy.
         return Row.trusting(columnNames, Collections.unmodifiableList(values));
     }
 
@@ -69,10 +63,6 @@ public class Table {
         return rows;
     }
 
-    /**
-     * Load a table from CSV. The first row is treated as the header.
-     * Columns whose names appear in keyColumns are marked as key columns.
-     */
     public static Table fromCsv(String name, Reader reader, List<String> keyColumns) throws IOException {
         List<String[]> rawRows = new ArrayList<>();
         try (BufferedReader br = new BufferedReader(reader)) {

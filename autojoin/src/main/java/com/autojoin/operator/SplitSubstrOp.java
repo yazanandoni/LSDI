@@ -1,12 +1,5 @@
 package com.autojoin.operator;
 
-/**
- * Logical SplitSubstr operator: selects an element from the row, splits it,
- * selects one part, then applies Substring.
- *
- *   SplitSubstr(row, k, sep, m, start, length, casing) :=
- *       Substring(SelectK(Split(SelectK(row, k), sep), m), start, length, casing)
- */
 public class SplitSubstrOp implements LogicalOperator {
 
     private final int k;

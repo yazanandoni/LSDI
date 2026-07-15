@@ -1,19 +1,5 @@
 package com.autojoin.operator;
 
-/**
- * Logical SplitSplitSubstr operator: two levels of split before Substring.
- *
- *   SplitSplitSubstr(row, k1, sep1, k2, sep2, m, start, length, casing) :=
- *       Substring(
- *           SelectK(Split(SelectK(Split(SelectK(row, k1), sep1), k2), sep2), m),
- *           start, length, casing)
- *
- * Example (Figure 1, row "Obama, Barack(1961-)"):
- *   k1=0  → "Obama, Barack(1961-)"
- *   sep1="(" → ["Obama, Barack", "1961-)"],  k2=0 → "Obama, Barack"
- *   sep2="," → ["Obama", " Barack"],         m=1  → " Barack"
- *   start=1, length=-1                               → "Barack"
- */
 public class SplitSplitSubstrOp implements LogicalOperator {
 
     private final int k1;

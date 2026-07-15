@@ -1,13 +1,5 @@
 package com.autojoin.operator;
 
-/**
- * Logical Constant operator: returns a fixed string regardless of input.
- *
- *   Constant(input) := input
- *
- * Used to produce separator strings (e.g. " ", "@") that are not derivable
- * from the source row.
- */
 public class ConstantOp implements LogicalOperator {
 
     private final String value;

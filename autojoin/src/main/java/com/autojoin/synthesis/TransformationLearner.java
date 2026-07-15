@@ -27,68 +27,24 @@ import java.util.*;
  *   5. Rejects constant-only programs and returns the LearnedTransformation with
  *      the highest injective score (null if none scores at least 1).
  *
- * Parameters (Algorithm 4's k / b / r / L): the paper defines these as formal
- * inputs but never publishes the values used in its experiments. The only
- * anchored numbers are b — "in practice we just need a few examples (3 or 4)"
- * (Section 3.2) — and Appendix H's success-bound example of T = 128 trials,
- * where per Proposition 3 a single 3-example trial already succeeds with
- * probability ~0.9999. Our k and r below are therefore implementation choices,
- * sized so the learning stage's runtime is small (its cost is nearly
- * data-size-independent: attempts × the synthesizer's CPU budget) while the
- * web-benchmark quality stays at the reproduced Figure 5b level.
  */
 public class TransformationLearner {
 
     private static final int TOP_K = 20;
     private static final int SUBSET_SIZE = 3;
-    // Number of random-subset trials per group (Algorithm 4's r). Appendix H's
-    // bound example uses T = 128 trials, but the score plateaus almost
-    // immediately: empirically on our benchmarks 128 trials produced join
-    // results identical to 12 at ~5x the runtime. Failure probability drops
-    // exponentially in T (Proposition 3), so raise this if a dataset's
-    // transform is being missed rather than mis-ranked.
     private static final int SUBSETS_PER_GROUP = 12;
-
-    // Algorithm 4's L: global cap on example sets across ALL column-pair
-    // groups. Groups are processed in descending order of average q-gram
-    // score, so the budget is spent on the most promising column pairs first
-    // and a table with many junk column pairs cannot blow up the runtime.
     private static final int MAX_TOTAL_SUBSETS = 512;
-
-    /**
-     * Minimum length of a derived key for it to count toward the injective score.
-     * A transformation that joins on a 1–2 character fragment is almost never a
-     * real key — it is the degenerate program the synthesizer falls back to when
-     * no genuine transform exists (e.g. a 2-char Substr that forms a handful of
-     * accidental 1:1 matches). Such fragments collide heavily and produce
-     * spurious joins, so they are not credited and the program is rejected by the
-     * score &lt; 1 guard. Real keys in practice (names, years, emails, cities) are
-     * comfortably longer than this.
-     */
     private static final int MIN_DERIVED_KEY_LEN = 3;
 
-    /** Attempts synthesized concurrently per wave (see learnGroup). */
     private static final int WAVE_SIZE = 4;
 
-    /** Enable verbose timing on stderr via -Dautojoin.debug=true. */
     static final boolean DEBUG = Boolean.getBoolean("autojoin.debug");
 
-    // -------------------------------------------------------------------------
-    // Public API
-    // -------------------------------------------------------------------------
 
-    /**
-     * Result of a successful learning attempt.
-     */
     public static final class LearnedTransformation {
         public final TransformationProgram program;
-        /** Name of the source column the transformation is applied to (its row index
-         *  is the column's position in the source table). */
         public final String sourceColumnName;
-        /** Name of the target key column that the transformation output should match. */
         public final String targetColumnName;
-        /** Injective-join score: number of derived keys that map exactly one
-         *  source row to exactly one target row. */
         public final int score;
 
         LearnedTransformation(TransformationProgram program,
@@ -113,12 +69,6 @@ public class TransformationLearner {
     public LearnedTransformation learn(List<ColumnPairMatches> columnPairMatches,
                                        Table sourceTable,
                                        Table targetTable) {
-        // Algorithm 4: go through groups in descending order of average q-gram
-        // score, so the global subset budget is consumed by the most promising
-        // column pairs first. Kept matches are all 1-to-1 (goodness 1.0), so
-        // scores usually tie — break ties by match COUNT: a column pair with
-        // hundreds of unique q-gram matches (e.g. Title->Title) is far more
-        // likely the real join than one with a handful of coincidental hits.
         List<ColumnPairMatches> orderedGroups = new ArrayList<>(columnPairMatches);
         orderedGroups.sort((a, b) -> {
             int byScore = Double.compare(avgScore(b), avgScore(a));
@@ -126,32 +76,17 @@ public class TransformationLearner {
             return Integer.compare(b.getMatches().size(), a.getMatches().size());
         });
 
-        // Strongest group's evidence, for relative pruning below.
         int maxMatches = 0;
         for (ColumnPairMatches g : orderedGroups) {
             maxMatches = Math.max(maxMatches, g.getMatches().size());
         }
 
-        // Sequential, deterministic prep: prune junk groups and allocate the
-        // global subset budget (Algorithm 4's L) in priority order. The actual
-        // learning per group then runs in PARALLEL — groups are independent
-        // (each gets its own synthesizer; tables and match groups are only
-        // read) — and results are reduced in the same priority order, so the
-        // outcome is identical to the sequential run, including tie-breaks.
         List<ColumnPairMatches> tasks = new ArrayList<>();
         List<Integer> budgets = new ArrayList<>();
         int remainingBudget = MAX_TOTAL_SUBSETS;
         for (ColumnPairMatches group : orderedGroups) {
             if (remainingBudget <= 0) break; // Algorithm 4's L cap
 
-            // Evidence pruning: a group with under 10% of the strongest
-            // group's 1:1 q-gram matches is almost certainly a coincidental
-            // column pairing (e.g. Title->Lead vocal(s) with 4 matches vs
-            // Title->Title with 271). Synthesis on its garbage examples
-            // reliably runs the search guard to exhaustion (~1s per attempt),
-            // so these groups dominate runtime while contributing nothing.
-            // The threshold is relative, so small tables — where every group
-            // has only a handful of matches — are unaffected.
             if (group.getMatches().size() * 10 < maxMatches) {
                 if (DEBUG) System.err.printf(
                         "  [learn] pruning group %s->%s (%d matches vs max %d)%n",
@@ -167,9 +102,6 @@ public class TransformationLearner {
             budgets.add(groupBudget);
         }
 
-        // parallelStream + collect preserves encounter order, so the reduce
-        // below sees group results in priority order regardless of which
-        // thread finished first.
         List<LearnedTransformation> groupResults =
                 java.util.stream.IntStream.range(0, tasks.size())
                         .parallel()
@@ -190,11 +122,6 @@ public class TransformationLearner {
         return best;
     }
 
-    /**
-     * Run the subset-sampling/synthesis loop for one column-pair group and
-     * return the group's best transformation (or null). Thread-safe: uses a
-     * private synthesizer instance and only reads shared inputs.
-     */
     private LearnedTransformation learnGroup(ColumnPairMatches group,
                                              int groupBudget,
                                              Table sourceTable,
@@ -208,18 +135,13 @@ public class TransformationLearner {
 
         List<MatchResult> matches = group.getMatches();
 
-        // Top-k matches
         List<MatchResult> topK = matches.subList(0, Math.min(TOP_K, matches.size()));
 
-        // Build the pool of (sourceRowIdx, targetRowIdx) pairs
         List<int[]> pairs = buildPairs(topK);
         if (pairs.isEmpty()) return null;
 
-        // Generate random subsets of size b within this group's budget.
         List<List<int[]>> subsets = randomSubsets(pairs, SUBSET_SIZE, groupBudget);
 
-        // Target-side key frequencies are fixed per group; compute them once
-        // instead of once per scored candidate program.
         Map<String, Integer> targetValueCounts = new HashMap<>();
         for (String v : tgtCol.getValues()) {
             targetValueCounts.merge(v, 1, Integer::sum);
@@ -229,13 +151,6 @@ public class TransformationLearner {
         int attempts = 0, slowAttempts = 0;
         LearnedTransformation best = null;
 
-        // Attempts run in parallel WAVES: synthesis calls within a wave are
-        // independent (one synthesizer each — the memo is per-attempt anyway),
-        // while results are folded sequentially between waves in deterministic
-        // order, so the outcome matches a sequential run. A wave's wall time
-        // is its slowest attempt instead of the sum. Like the paper's
-        // Algorithm 4, every generated example set is tried — there is no
-        // early exit once a good program is found.
         int waveSize = WAVE_SIZE;
         for (int w = 0; w < subsets.size(); w += waveSize) {
             List<List<int[]>> wave = subsets.subList(w, Math.min(w + waveSize, subsets.size()));
@@ -257,8 +172,6 @@ public class TransformationLearner {
 
                 if (r.program == null) continue;
 
-                // Reject degenerate constant-only programs: they ignore the
-                // source row and collapse every row onto one fixed key.
                 if (isConstantOnly(r.program)) continue;
 
                 int score = computeScore(r.program, sourceTable, targetValueCounts);
@@ -282,7 +195,6 @@ public class TransformationLearner {
         return best;
     }
 
-    /** Outcome of one synthesis attempt, carried back from a worker thread. */
     private static final class AttemptResult {
         final TransformationProgram program; // null if none found
         final long millis;
@@ -298,12 +210,6 @@ public class TransformationLearner {
         }
     }
 
-    /**
-     * Run one synthesis attempt on its own synthesizer instance (the memo is
-     * per-attempt, so nothing is lost vs. a shared one). Safe to call from
-     * parallel worker threads. Returns null when the subset has no usable
-     * examples.
-     */
     private static AttemptResult runAttempt(List<int[]> subset,
                                             Table sourceTable,
                                             Column tgtCol) {
@@ -317,7 +223,6 @@ public class TransformationLearner {
         return new AttemptResult(program, ms, synthesizer.lastNodesVisited(), examples);
     }
 
-    /** Compact one-line view of example pairs, for debug logging. */
     private static String describeExamples(List<ExamplePair> examples) {
         StringBuilder sb = new StringBuilder("[");
         for (int i = 0; i < examples.size(); i++) {
@@ -328,25 +233,9 @@ public class TransformationLearner {
         return sb.append(']').toString();
     }
 
-    // -------------------------------------------------------------------------
-    // Injective-join scoring
-    // -------------------------------------------------------------------------
-
-    /**
-     * Score a transformation by how many derived keys form a clean 1:1 join.
-     *
-     * A derived key counts only when it is produced by exactly one source row
-     * AND matches exactly one target row. This rewards transformations that
-     * uniquely identify a join partner and penalizes:
-     *   - source-side collisions (many source rows → the same key), which is how
-     *     numeric-column joins and constants degenerate, and
-     *   - target-side collisions (one key → many target rows), which is how a
-     *     lossy projection of a composite key (e.g. dropping "Type") degenerates.
-     */
     static int computeScore(TransformationProgram program,
                             Table sourceTable,
                             Map<String, Integer> targetValueCounts) {
-        // How many source rows produce each derived value.
         Map<String, Integer> derivedCounts = new HashMap<>();
         for (int i = 0; i < sourceTable.numRows(); i++) {
             String[] row = rowToArray(sourceTable.getRow(i));
@@ -358,15 +247,14 @@ public class TransformationLearner {
 
         int score = 0;
         for (Map.Entry<String, Integer> e : derivedCounts.entrySet()) {
-            if (e.getValue() != 1) continue;                       // many source rows → ambiguous
-            if (e.getKey().length() < MIN_DERIVED_KEY_LEN) continue; // degenerate short fragment
+            if (e.getValue() != 1) continue;
+            if (e.getKey().length() < MIN_DERIVED_KEY_LEN) continue;
             Integer tgtCount = targetValueCounts.get(e.getKey());
-            if (tgtCount != null && tgtCount == 1) score++;        // matches exactly one target row
+            if (tgtCount != null && tgtCount == 1) score++;
         }
         return score;
     }
 
-    /** True if every operator in the program is a row-independent Constant. */
     private static boolean isConstantOnly(TransformationProgram program) {
         List<LogicalOperator> ops = program.getOperators();
         if (ops.isEmpty()) return true;
@@ -376,22 +264,6 @@ public class TransformationLearner {
         return true;
     }
 
-    /**
-     * Produce the equi-join result: for each source row, apply the program and
-     * match against the target key column. Returns matched (sourceRow, targetRow)
-     * pairs.
-     *
-     * Join cardinality follows the paper's Definition 1: the target column is
-     * a KEY column, so joins are 1:1 or N:1. Target-side uniqueness is
-     * enforced (a derived key matching several target rows is ambiguous — we
-     * cannot tell which row is right, so we omit it rather than guess), but
-     * MANY source rows may join the same target row: real tables repeat
-     * entities across rows (e.g. one row per presidential TERM, with
-     * multi-term presidents appearing twice), and the per-row foreign key is
-     * still unambiguous. The transform itself is still SELECTED by the strict
-     * injective score of {@link #computeScore}, which keeps lossy projections
-     * (that collapse distinct entities onto one key) from winning.
-     */
     public static List<Row[]> applyJoin(TransformationProgram program,
                                          Table sourceTable,
                                          Table targetTable,
@@ -400,12 +272,10 @@ public class TransformationLearner {
         if (tgtColOpt.isEmpty()) return List.of();
         Column tgtCol = tgtColOpt.get();
 
-        // How many target rows hold each target key value (for target-side uniqueness).
         Map<String, Integer> targetValueCounts = new HashMap<>();
         for (String v : tgtCol.getValues()) {
             targetValueCounts.merge(v, 1, Integer::sum);
         }
-        // First target row index for each key value.
         Map<String, Integer> targetIndex = new HashMap<>();
         for (int i = 0; i < tgtCol.getValues().size(); i++) {
             targetIndex.putIfAbsent(tgtCol.getValue(i), i);
@@ -417,7 +287,7 @@ public class TransformationLearner {
             String derived = program.apply(rowArr);
             if (derived == null) continue;
             Integer tCount = targetValueCounts.get(derived);
-            if (tCount == null || tCount != 1) continue;       // target-side ambiguous / no match
+            if (tCount == null || tCount != 1) continue;
             Integer tgtIdx = targetIndex.get(derived);
             if (tgtIdx != null) {
                 results.add(new Row[]{sourceTable.getRow(i), targetTable.getRow(tgtIdx)});
@@ -426,11 +296,7 @@ public class TransformationLearner {
         return results;
     }
 
-    // -------------------------------------------------------------------------
-    // Helpers
-    // -------------------------------------------------------------------------
 
-    /** Average q-gram goodness of a group's matches (Algorithm 4 group order). */
     private static double avgScore(ColumnPairMatches group) {
         List<MatchResult> matches = group.getMatches();
         if (matches.isEmpty()) return 0.0;
@@ -445,7 +311,6 @@ public class TransformationLearner {
             List<Integer> srcRows = m.getBestSourceRows();
             List<Integer> tgtRows = m.getBestTargetRows();
             if (srcRows.isEmpty() || tgtRows.isEmpty()) continue;
-            // Use the first source row and first target row from each match result
             pairs.add(new int[]{srcRows.get(0), tgtRows.get(0)});
         }
         return pairs;
@@ -455,7 +320,7 @@ public class TransformationLearner {
         if (pairs.size() <= size) {
             return List.of(new ArrayList<>(pairs));
         }
-        Random rng = new Random(42); // deterministic for reproducibility
+        Random rng = new Random(42);
         List<List<int[]>> subsets = new ArrayList<>();
         Set<String> seen = new HashSet<>();
 
@@ -474,9 +339,6 @@ public class TransformationLearner {
     }
 
     private static String subsetKey(List<int[]> subset) {
-        // Order-independent key: the same 3 pairs drawn in a different shuffle
-        // order are the same example set — each duplicate would otherwise cost
-        // a full (identical) synthesis attempt.
         List<String> parts = new ArrayList<>(subset.size());
         for (int[] p : subset) parts.add(p[0] + ":" + p[1]);
         Collections.sort(parts);
@@ -499,7 +361,6 @@ public class TransformationLearner {
     }
 
     static String[] rowToArray(Row row) {
-        // Positional values: preserves every column even when two share a name.
         return row.getValues().toArray(new String[0]);
     }
 }

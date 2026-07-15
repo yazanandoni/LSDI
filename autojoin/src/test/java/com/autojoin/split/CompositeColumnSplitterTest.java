@@ -26,12 +26,10 @@ class CompositeColumnSplitterTest {
         assertTrue(split.numColumns() > table.numColumns(), "sub-columns should be added");
         assertTrue(split.getColumn("Name").isPresent(), "original key column retained");
 
-        // The name part before " (" must be produced as a sub-column.
         List<String> namePart = List.of("Obama, Barack", "Bush, George", "Clinton, Bill", "Reagan, Ronald");
         boolean found = split.getColumns().stream().anyMatch(c -> c.getValues().equals(namePart));
         assertTrue(found, "expected a 'before (' sub-column holding the name part");
 
-        // Every emitted sub-column is a key (so discovery treats it as a target).
         split.getColumns().stream()
                 .filter(c -> !c.getName().equals("Name") && !c.getName().equals("Approval"))
                 .forEach(c -> assertTrue(c.isKey(), c.getName() + " should be a key sub-column"));
@@ -48,7 +46,6 @@ class CompositeColumnSplitterTest {
 
     @Test
     void ignoresInconsistentPunctuation() {
-        // '(' appears in only 1 of 4 values → below the coverage threshold.
         Table table = new Table("t", List.of(
                 new Column("X", List.of("alpha (1)", "beta", "gamma", "delta"), true),
                 new Column("v", List.of("1", "2", "3", "4"), false)));

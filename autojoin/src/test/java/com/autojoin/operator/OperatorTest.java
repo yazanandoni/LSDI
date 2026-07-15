@@ -102,8 +102,6 @@ class OperatorTest {
     // Figure 4: construct "[UBAX01] AXUG General Session"
     @Test
     void splitSubstrFigure4ExtractId() {
-        // row[0]="UBAX01" — just use SubstrOp for this; SplitSubstr with sep not in string
-        // Test: split "UBAX01" by nothing meaningful → still reachable via SubstrOp
         SubstrOp id = new SubstrOp(0, 0, -1, Casing.NONE);
         assertEquals("UBAX01", id.apply(UBAX01));
     }
@@ -114,20 +112,12 @@ class OperatorTest {
 
     @Test
     void splitSplitSubstrFirstNameObama() {
-        // row[0]="Obama, Barack(1961-)"
-        // split("(") → ["Obama, Barack", "1961-)"], [0]="Obama, Barack"
-        // split(",") → ["Obama", " Barack"],         [1]=" Barack"
-        // substring(1,-1) → "Barack"
         SplitSplitSubstrOp op = new SplitSplitSubstrOp(0, "(", 0, ",", 1, 1, -1, Casing.NONE);
         assertEquals("Barack", op.apply(OBAMA));
     }
 
     @Test
     void splitSplitSubstrFirstNameBush() {
-        // "Bush, George W.(1946-)"
-        // split("(") → ["Bush, George W.", "1946-)"], [0]
-        // split(",") → ["Bush", " George W."],         [1]=" George W."
-        // substring(1,-1) → "George W."
         SplitSplitSubstrOp op = new SplitSplitSubstrOp(0, "(", 0, ",", 1, 1, -1, Casing.NONE);
         assertEquals("George W.", op.apply(BUSH));
     }
@@ -144,10 +134,6 @@ class OperatorTest {
         assertEquals("Ronald", op.apply(REAGAN));
     }
 
-    // -------------------------------------------------------------------------
-    // Full transformation — Figure 1: reconstruct "First Last" from "Last, First(year)"
-    // Three operators: SplitSplitSubstr + Constant + SplitSubstr
-    // -------------------------------------------------------------------------
 
     private String applyFigure1Transform(String[] row) {
         SplitSplitSubstrOp firstName = new SplitSplitSubstrOp(0, "(", 0, ",", 1, 1, -1, Casing.NONE);
@@ -176,10 +162,6 @@ class OperatorTest {
         assertEquals("Ronald Reagan", applyFigure1Transform(REAGAN));
     }
 
-    // -------------------------------------------------------------------------
-    // Full transformation — Figure 4: "[ID] Session Name"
-    // ConstantOp("[") + SubstrOp(0) + ConstantOp("] ") + SubstrOp(1)
-    // -------------------------------------------------------------------------
 
     private String applyFigure4Transform(String[] row) {
         ConstantOp open    = new ConstantOp("[");
@@ -199,9 +181,6 @@ class OperatorTest {
         assertEquals("[UBAX03] Master Planning Session", applyFigure4Transform(UBAX03));
     }
 
-    // -------------------------------------------------------------------------
-    // describe() — all operators produce non-null, non-empty descriptions
-    // -------------------------------------------------------------------------
 
     @Test
     void allDescribeMethodsReturnUsefulStrings() {

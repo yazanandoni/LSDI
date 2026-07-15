@@ -11,78 +11,30 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CancellationException;
 
-/**
- * SM — Substring Matching, Warren &amp; Tompa, "Multi-column substring
- * matching for database schema translation", VLDB 2006 (the paper's §6.2
- * baseline, ref [22]).
- *
- * <p>This follows the original's Algorithms 1–4 (we obtained ref [22]; an
- * earlier reconstruction from the AutoJoin paper's two-sentence description
- * wrongly assumed row-aligned tables and scored zero whenever the target was
- * shuffled). The method needs NO linked rows:
- * <ol>
- *   <li><b>Bootstrap column</b> (Alg. 2): sample a fraction of each source
- *       column's distinct values (interleaved); score the column by its
- *       q-gram overlap with the target column, Eq. (1):
- *       {@code (sum(hits/len)/t)^q}. The best column starts the formula.</li>
- *   <li><b>Candidate pairs</b> (Alg. 3): for each sampled value, retrieve the
- *       top-r most similar target values by tf-idf-weighted q-gram overlap
- *       (Eqs. 3–4) — content similarity replaces row correspondence.</li>
- *   <li><b>Edit recipes</b> (§3.3.2/Alg. 4): align each pair by longest
- *       common substring (the spine of their Hirschberg edit path), yielding
- *       recipes like "%B3[1-n]" — chars of the source column at a position in
- *       the target, with an end-of-string variant for variable-length fields.
- *       Identical recipes are counted; the most frequent wins (serendipitous
- *       matches do not repeat at the same positions).</li>
- *   <li><b>Iterate</b> (Alg. 1): while the formula has unknown regions, try
- *       every column against just those gaps (targets filtered to ones
- *       consistent with the partial formula), vote, splice in the winner.
- *       Constant leftovers become literal separators (their §6). Matched
- *       tuples are removed and the process repeats for secondary formulas
- *       (§3.1) — the UserID dataset in the original needed exactly that.</li>
- * </ol>
- *
- * <p>Costs stay faithful: candidate retrieval scans the target column per
- * sampled value (no index), so learning is O(t·Nt·grams) and the whole run
- * grows super-linearly with table size — reproducing the paper's Figure 8,
- * where SM times out at ~10K rows. Hot loops poll the interrupt flag so the
- * backend's §6.4 timeout budget can cut the method off cleanly.
- */
+
 public final class SubstringMatching implements JoinMethod {
 
-    /** q-gram length; both papers force q ≥ 3. */
     private static final int Q = 3;
 
-    /** W&T sample "10% of the distinct values" of each column... */
     private static final double SAMPLE_FRACTION = 0.10;
 
-    /** ...but show (their Fig. 2) that a few hundred samples suffice. */
     private static final int MIN_SAMPLE = 20;
     private static final int MAX_SAMPLE = 400;
 
-    /** Similar target values retained per sampled source value (their top-r). */
     private static final int TOP_R = 5;
 
-    /** A recipe must recur to be trusted ("occurs most often"). */
     private static final int MIN_VOTES = 2;
 
-    /** Bound on formula-growing iterations (Alg. 1's loop). */
     private static final int MAX_REGION_ITERATIONS = 8;
 
-    /** Remove-matched-and-repeat passes (§3.1's secondary formulas). */
     private static final int MAX_PASSES = 3;
 
-    /** Verbose learning trace on stderr via -Dautojoin.sm.debug=true. */
     private static final boolean DEBUG = Boolean.getBoolean("autojoin.sm.debug");
 
     @Override
     public String name() { return "SM"; }
 
-    // ------------------------------------------------------------------
-    // Formula model: an ordered chain of regions (their ω1 + ω2 + ... + ωv)
-    // ------------------------------------------------------------------
 
-    /** COPY = chars of a source column; LIT = literal text; UNKNOWN = gap. */
     private record Seg(int kind, int col, int start, int len, boolean toEnd, String lit) {
         static final int COPY = 0, LIT = 1, UNKNOWN = 2;
         static Seg copy(int col, int start, int len, boolean toEnd) { return new Seg(COPY, col, start, len, toEnd, null); }
@@ -90,15 +42,11 @@ public final class SubstringMatching implements JoinMethod {
         static Seg unknown() { return new Seg(UNKNOWN, 0, 0, 0, false, null); }
     }
 
-    /** A candidate recipe: fill unknown region u from column col. */
     private record Recipe(int u, int col, int bStart, int lenOrEnd,
                           boolean gapBefore, boolean gapAfter) {}
 
     @Override
     public List<Row[]> join(JoinInput in) {
-        // W&T search ALL source columns — their experiments deliberately add
-        // noise columns to stress the column selection (Alg. 2), so SM must
-        // not be handed the ground truth's join columns.
         List<String[]> src = new ArrayList<>(in.source.numRows());
         int cols = 0;
         for (int i = 0; i < in.source.numRows(); i++) {
@@ -154,13 +102,9 @@ public final class SubstringMatching implements JoinMethod {
         return pairs;
     }
 
-    // ------------------------------------------------------------------
-    // Learning (Algorithms 1–4)
-    // ------------------------------------------------------------------
 
     private List<Seg> learnFormula(List<String[]> src, List<String> tgt,
                                    List<Integer> srcRows, List<Integer> tgtRows, int cols) {
-        // Alg. 2: bootstrap column by q-gram overlap score, Eq. (1).
         int bstart = -1;
         double bestScore = 0;
         for (int c = 0; c < cols; c++) {
@@ -170,7 +114,6 @@ public final class SubstringMatching implements JoinMethod {
         if (DEBUG) System.err.println("[SM] bstart=" + bstart + " score=" + bestScore);
         if (bstart < 0) return null;
 
-        // tf-idf weights over the target subset (Eq. 3), for pair retrieval.
         Map<String, Double> idf = buildIdf(tgt, tgtRows);
 
         List<Seg> formula = new ArrayList<>();
@@ -200,11 +143,6 @@ public final class SubstringMatching implements JoinMethod {
             for (Map.Entry<Recipe, Integer> e : votes.entrySet()) {
                 if (e.getValue() > bestVotes) { bestVotes = e.getValue(); best = e.getKey(); }
             }
-            // W&T's outlier rejection: a real region recurs across the sampled
-            // rows, "superfluous matches ... occur infrequently enough that the
-            // outlier recipes can be recognised and discarded". Require a
-            // majority of contributing rows, or coincidental 1-char matches
-            // would nibble away separator regions (e.g. DBLP's " | ").
             int needed = Math.max(MIN_VOTES, (contributing.size() + 1) / 2);
             if (DEBUG) System.err.println("[SM] iter=" + iter + " votes=" + votes.size()
                     + " best=" + best + " x" + bestVotes + "/" + needed
@@ -217,17 +155,9 @@ public final class SubstringMatching implements JoinMethod {
         if (DEBUG) System.err.println("[SM] literals=" + literalsOk + " final=" + describe(formula));
         if (!literalsOk) return null;
         for (Seg s : formula) if (s.kind() == Seg.COPY) return formula;
-        return null; // literal-only formula joins nothing real
+        return null;
     }
 
-    /** Alg. 2 / Eq. (1): score a column by its overlap with the target over
-     *  sampled distinct values. W&T normalise the q-gram hit count so the
-     *  score "reflects the length of the common substrings"; counting rows hit
-     *  by ANY q-gram inverts that (ubiquitous short values like a year hit
-     *  every row, and their all-common q-grams then get zero tf-idf weight in
-     *  step 2). We therefore score the sampled value directly by its longest
-     *  common substring with sampled target values — long, distinctive
-     *  overlaps win, exactly the property the bootstrap column needs. */
     private double scoreColumn(List<String[]> src, List<String> tgt,
                                List<Integer> srcRows, List<Integer> tgtRows, int c) {
         LinkedHashSet<String> distinct = new LinkedHashSet<>();
@@ -254,8 +184,6 @@ public final class SubstringMatching implements JoinMethod {
         return Math.pow(acc / keyIdx.size(), Q);
     }
 
-    /** Eq. (4): rank target values by summed tf-idf weight of shared q-grams;
-     *  keep the top r. Scans the target subset per value, like the original. */
     private List<String> similarTargets(String b, List<String> tgt,
                                         List<Integer> tgtRows, Map<String, Double> idf) {
         Set<String> grams = qGrams(b);
@@ -284,8 +212,6 @@ public final class SubstringMatching implements JoinMethod {
         return best;
     }
 
-    /** Targets on which every known segment of the partial formula aligns in
-     *  order for this row (Alg. 1's "values of A matching partial translation"). */
     private List<String> consistentTargets(List<Seg> formula, String[] rowVals,
                                            List<String> tgt, List<Integer> tgtRows) {
         List<String> out = new ArrayList<>();
@@ -297,32 +223,25 @@ public final class SubstringMatching implements JoinMethod {
         return out;
     }
 
-    /** §3.3.2: align source value and target gap by longest common substring
-     *  and emit position-keyed recipes (with the end-of-string clone). */
     private void collectRecipes(List<Seg> formula, String[] rowVals, String a,
                                 int col, String b, boolean firstIter,
                                 Map<Recipe, Integer> votes) {
         List<int[]> gaps = unknownGaps(formula, rowVals, a); // {unknownIdx, gapStart, gapEnd}
         if (gaps == null) return;
-        // Bootstrap recipes need q-gram-sized evidence; later iterations may
-        // map even single characters (W&T's Table 1: login = first[1]+last) —
-        // position voting filters the coincidences, which do not repeat at
-        // one (column, position) across many sampled rows.
         int minLen = firstIter ? Q : 1;
         for (int[] g : gaps) {
             String gap = a.substring(g[1], g[2]);
-            int[] lcs = longestCommonSubstring(b, gap);      // {bPos, gapPos, len}
+            int[] lcs = longestCommonSubstring(b, gap);
             if (lcs == null || lcs[2] < minLen) continue;
             boolean before = lcs[1] > 0;
             boolean after = lcs[1] + lcs[2] < gap.length();
             votes.merge(new Recipe(g[0], col, lcs[0], lcs[2], before, after), 1, Integer::sum);
-            if (lcs[0] + lcs[2] == b.length()) {             // variable-length clone: B[k-n]
+            if (lcs[0] + lcs[2] == b.length()) {
                 votes.merge(new Recipe(g[0], col, lcs[0], -1, before, after), 1, Integer::sum);
             }
         }
     }
 
-    /** Replace unknown region u with (unknown?) + copy + (unknown?). */
     private void splice(List<Seg> formula, Recipe r) {
         int seen = -1;
         for (int i = 0; i < formula.size(); i++) {
@@ -340,8 +259,6 @@ public final class SubstringMatching implements JoinMethod {
         }
     }
 
-    /** Their §6 separator search: a leftover unknown region that holds the
-     *  same string across consistent samples becomes a literal. */
     private boolean resolveLiterals(List<Seg> formula, List<String[]> src, List<String> tgt,
                                     List<Integer> sample, List<Integer> tgtRows) {
         if (!hasUnknown(formula)) return true;
@@ -382,13 +299,7 @@ public final class SubstringMatching implements JoinMethod {
         return true;
     }
 
-    // ------------------------------------------------------------------
-    // Formula application / alignment helpers
-    // ------------------------------------------------------------------
 
-    /** Match the formula's known segments left-to-right against a target and
-     *  return each unknown region's span as {unknownIdx, start, end}, or null
-     *  if some known segment cannot be aligned. */
     private List<int[]> unknownGaps(List<Seg> formula, String[] rowVals, String a) {
         List<int[]> gaps = new ArrayList<>();
         int pos = 0, u = 0;
@@ -406,14 +317,14 @@ public final class SubstringMatching implements JoinMethod {
                 gaps.add(new int[]{pendingUnknown, pos, idx});
                 pendingUnknown = -1;
             } else if (idx != pos) {
-                return null;                       // adjacent segments must abut
+                return null;
             }
             pos = idx + piece.length();
         }
         if (pendingUnknown >= 0) {
             gaps.add(new int[]{pendingUnknown, pos, a.length()});
         } else if (pos != a.length()) {
-            return null;                           // trailing unmatched characters
+            return null;
         }
         return gaps;
     }
@@ -437,7 +348,6 @@ public final class SubstringMatching implements JoinMethod {
                                 ? v.substring(s.start(), s.start() + s.len()) : null);
     }
 
-    /** Longest common substring of b and gap: {posInB, posInGap, length}. */
     private int[] longestCommonSubstring(String b, String gap) {
         int nb = b.length(), ng = gap.length();
         if (nb == 0 || ng == 0) return null;
@@ -459,9 +369,6 @@ public final class SubstringMatching implements JoinMethod {
         return best == 0 ? null : new int[]{bPos, gPos, best};
     }
 
-    // ------------------------------------------------------------------
-    // Small utilities
-    // ------------------------------------------------------------------
 
     private static String describe(List<Seg> formula) {
         StringBuilder sb = new StringBuilder("[");
@@ -502,8 +409,6 @@ public final class SubstringMatching implements JoinMethod {
         return grams;
     }
 
-    /** W&T take values "at equally distanced rows"; caps keep t bounded (their
-     *  Fig. 2 shows a few hundred samples suffice even at 700K rows). */
     private static List<Integer> interleavedSample(List<Integer> rows) {
         int t = (int) Math.ceil(rows.size() * SAMPLE_FRACTION);
         t = Math.max(Math.min(MIN_SAMPLE, rows.size()), Math.min(t, MAX_SAMPLE));

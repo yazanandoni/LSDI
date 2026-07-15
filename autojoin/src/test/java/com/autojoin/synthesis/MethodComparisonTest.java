@@ -24,23 +24,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * Quality comparison of Auto-Join against the paper's §6.2 method set — AJ,
- * AJ-E, SM, DQ-P, DQ-R, FJ-C, FJ-FR and FJ-O — on the Web benchmark;
- * reproduces Figure 5b (average precision/recall per method) on local
- * hardware, so all methods are compared on identical data and scoring.
- *
- * Gated behind {@code -Dcompare=true} because it runs the full Auto-Join
- * pipeline plus a 520-config FJ-O grid over every fixture, which is far heavier
- * than a normal unit test. Run with:
- *
- *   mvn -q -Dtest=MethodComparisonTest -Dcompare=true test
- *
- * Precision/recall follow the paper (§6.1): precision is |G∩J|/|J|, recall is
- * |G∩J|/|G| over SETS of (sourceKey, targetKey) row pairs; per-method averages
- * take precision over non-empty cases only, recall over all cases with ground
- * truth, and F is the harmonic mean of the two averages.
- */
 class MethodComparisonTest {
 
     @Test
@@ -59,9 +42,7 @@ class MethodComparisonTest {
         for (JoinMethod m : baselines) byMethod.put(m.name(), new ArrayList<>());
 
         AutoJoin autoJoin = new AutoJoin();
-        AutoJoin autoJoinE = new AutoJoin(false); // AJ-E: equality join only, no §5 fuzzy step
-        // FJ-O grid: prepare each case once, then pick the single config with the
-        // highest average per-case F across all cases (the paper's oracle rule).
+        AutoJoin autoJoinE = new AutoJoin(false);
         List<FuzzyJoinOracle.CaseEval> oracleEvals = new ArrayList<>(cases.size());
         for (Case c : cases) {
             oracleEvals.add(FuzzyJoinOracle.prepare(
@@ -87,7 +68,6 @@ class MethodComparisonTest {
             }
         }
 
-        // FJ-O under the chosen global config.
         List<Metrics> fjo = new ArrayList<>(cases.size());
         for (int i = 0; i < cases.size(); i++) {
             fjo.add(cases.get(i).scorer.scoreRows(oracleEvals.get(i).pairsAt(oracleCfg), true));
@@ -97,7 +77,6 @@ class MethodComparisonTest {
         printReport(cases, byMethod, oracleCfg);
     }
 
-    /** Choose the FJ-O config maximizing average per-case F over all gt-cases. */
     private static FuzzyJoinOracle.Config pickOracleConfig(
             List<Case> cases, List<FuzzyJoinOracle.CaseEval> evals) {
         FuzzyJoinOracle.Config best = null;
@@ -161,7 +140,6 @@ class MethodComparisonTest {
 
     private static String trim(String s) { return s.length() > 26 ? s.substring(0, 26) : s; }
 
-    // ----- case loading -----
 
     private static List<Case> loadCases() throws IOException {
         List<Case> cases = new ArrayList<>();
@@ -198,12 +176,6 @@ class MethodComparisonTest {
         }
     }
 
-    /**
-     * Scores a method's joined pairs against ground truth exactly as
-     * {@link BenchmarkIntegrationTest}, but set-based per the paper: a produced
-     * pair is its (srcKey, tgtKey) fingerprint, deduped so duplicate source keys
-     * cannot inflate recall past 1.
-     */
     private static final class Scorer {
         final Map<String, List<String>> gtMap;
         final int gtSize;

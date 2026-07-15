@@ -19,26 +19,7 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * Paper §6.4 scalability timing (Figure 8) on DBLP-derived tables.
- *
- * <p>This class is intentionally NOT named {@code *Test}, so the normal surefire
- * run ignores it — it needs multi-GB data and a large heap. Generate the data
- * with {@code scripts/dblp_to_csv.py} (or the {@code scripts/run_scalability.sh}
- * orchestrator), then invoke it explicitly:
- *
- * <pre>
- *   mvn -Dtest=ScalabilityBenchmark -DargLine=-Xmx8g \
- *       -Ddblp.dir=/path/to/data "-Ddblp.n=100,1000,10000,100000" test
- * </pre>
- *
- * <p>Heap must be set via {@code -DargLine} (surefire forks the test JVM;
- * {@code MAVEN_OPTS} only sizes Maven itself). Add {@code -Dautojoin.debug=true}
- * for the per-stage (index / learn / equi-join) breakdown on stderr.
- *
- * <p>If {@code -Ddblp.dir} is unset or missing the test skips (assumeTrue), so an
- * accidental invocation is a no-op rather than a failure.
- */
+
 class ScalabilityBenchmark {
 
     @Test
@@ -55,12 +36,6 @@ class ScalabilityBenchmark {
                 System.getProperty("methods", "AJ,SM,FJ-C,FJ-O").split(","))
                 .map(String::trim).filter(s -> !s.isEmpty()).toList();
 
-        // The fuzzy baselines (FJ-C, FJ-O) are inherently all-pairs O(Ns·Nt) and
-        // SM's alignment search is O(candidates·Ns) — this is exactly why the
-        // paper (Fig. 8) shows all three timing out early. We skip a run once it
-        // exceeds its cap rather than launch a multi-minute computation that
-        // would lag the machine; the skip IS the "does not scale" result. Only
-        // AJ (near-linear) always runs.
         long fuzzyMaxPairs = Long.getLong("fuzzy.maxpairs", 4_000_000L);
         long smMaxRows = Long.getLong("sm.maxrows", 5_000L);
 
@@ -72,8 +47,6 @@ class ScalabilityBenchmark {
                 System.out.printf("%-8d (missing %s — skipped)%n", n, dir);
                 continue;
             }
-            // Source keys = the three fields, so BOTH join directions are exercised
-            // (as the real tool does); target key = the concatenated column.
             Table src = load(dir.resolve("source.csv"), "src", List.of("authors", "title", "year"));
             Table tgt = load(dir.resolve("target.csv"), "tgt", List.of("record"));
             List<String> srcKeys = List.of("authors", "title", "year");
@@ -106,7 +79,6 @@ class ScalabilityBenchmark {
         }
     }
 
-    /** Run one method end-to-end and return the number of joined pairs. */
     private static int runMethod(String method, Table src, Table tgt,
                                  List<String> srcKeys, List<String> tgtKeys) {
         switch (method) {

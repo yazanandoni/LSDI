@@ -20,24 +20,10 @@ import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-/**
- * End-to-end integration tests loading every benchmark CSV pair via
- * Table.fromCsv() and running the full AutoJoin pipeline.
- *
- * A {@link TestFactory} discovers all fixtures under data/fixtures/web-benchmark
- * (the paper's published 31-pair Web benchmark) and runs each as its own test
- * node. Each case prints diagnostics — learned transformation, direction,
- * precision/recall vs ground truth, and sample mismatches — and an @AfterAll
- * summary prints a precision/recall table across all cases.
- *
- * Precision/recall follow the paper (Section 6.1): empty results are excluded
- * from average precision but counted (as 0 recall) in average recall.
- */
 class BenchmarkIntegrationTest {
 
     private final AutoJoin autoJoin = new AutoJoin();
 
-    /** Collected per-case metrics, populated as the dynamic tests run. */
     private static final List<Metrics> RESULTS = new ArrayList<>();
 
     @TestFactory
@@ -60,13 +46,6 @@ class BenchmarkIntegrationTest {
                 }));
     }
 
-    /**
-     * Parse the {@code -Dbenchmark.only} system property into a list of
-     * lower-cased, comma-separated substring filters. Empty/absent → run all.
-     *
-     * Example: {@code mvn test -Dtest=BenchmarkIntegrationTest "-Dbenchmark.only=beatles,fruits 1"}
-     * runs only fixtures whose id contains "beatles" or "fruits 1".
-     */
     private static List<String> parseOnlyFilter() {
         String only = System.getProperty("benchmark.only", "").trim();
         if (only.isEmpty()) return List.of();
@@ -77,7 +56,6 @@ class BenchmarkIntegrationTest {
                 .collect(Collectors.toList());
     }
 
-    /** A fixture matches when no filter is set, or its id contains any filter substring. */
     private static boolean matchesFilter(String pairId, List<String> filters) {
         if (filters.isEmpty()) return true;
         String lower = pairId.toLowerCase();
@@ -127,9 +105,6 @@ class BenchmarkIntegrationTest {
             Row srcRow = forward ? pair[0] : pair[1];
             Row tgtRow = forward ? pair[1] : pair[0];
 
-            // Positional, like the target side: duplicate source key names
-            // (e.g. duke's gt header lists "column 1" twice) would otherwise
-            // collapse onto one value and never match the ground truth.
             String srcFp = BenchmarkTestHelper.positionalFingerprint(srcRow, srcKeyCols, "|");
             String tgtFp = BenchmarkTestHelper.positionalFingerprint(tgtRow, tgtKeyCols, " | ");
             List<String> expected = gtMap.get(srcFp);
@@ -167,12 +142,11 @@ class BenchmarkIntegrationTest {
                 "case", "direction", "prec", "recall", "tp", "joined", "gt");
         System.out.println("--------------------------------------------------------------------------------");
 
-        // Worst recall first, so failing edge cases surface at the top.
         List<Metrics> sorted = new ArrayList<>(RESULTS);
         sorted.sort((a, b) -> Double.compare(a.recall, b.recall));
 
-        double precSum = 0; int precCount = 0;   // precision: non-empty cases only (paper)
-        double recallSum = 0; int recallCount = 0; // recall: all cases with ground truth
+        double precSum = 0; int precCount = 0;
+        double recallSum = 0; int recallCount = 0;
 
         for (Metrics m : sorted) {
             String dir = m.direction == null ? "-" : m.direction;

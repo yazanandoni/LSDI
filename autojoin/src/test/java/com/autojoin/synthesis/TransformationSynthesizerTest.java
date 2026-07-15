@@ -6,22 +6,10 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * Tests for TransformationSynthesizer (Algorithm 5) using the paper's examples.
- *
- * Each test feeds a small set of (sourceRow, targetValue) example pairs to
- * TryLearnTransform and verifies that the returned program:
- *   (a) reproduces the target values on all training examples, and
- *   (b) generalises correctly to held-out rows from the same table.
- */
 class TransformationSynthesizerTest {
 
     private final TransformationSynthesizer synth = new TransformationSynthesizer();
 
-    // -----------------------------------------------------------------------
-    // Figure 1: "Last, First(year-)" → "First Last"
-    // Source rows are from the right table; target values from the left table.
-    // -----------------------------------------------------------------------
 
     static final String[] OBAMA   = {"Obama, Barack(1961-)",      "47.0"};
     static final String[] BUSH    = {"Bush, George W.(1946-)",    "49.4"};
@@ -57,15 +45,9 @@ class TransformationSynthesizerTest {
         TransformationProgram prog = synth.tryLearnTransform(examples);
 
         assertNotNull(prog);
-        // The paper's program uses 3 operators: first-name, space, last-name.
-        // We accept any program of complexity ≤ 6 as "minimum-enough".
         assertTrue(prog.complexity() <= 6,
                 "Expected complexity ≤ 6, got " + prog.complexity() + ": " + prog.describe());
     }
-
-    // -----------------------------------------------------------------------
-    // Figure 4: [ID, SessionName] → "[ID] SessionName"
-    // -----------------------------------------------------------------------
 
     static final String[] UBAX01 = {"UBAX01", "AXUG General Session"};
     static final String[] UBAX02 = {"UBAX02", "How2 Session"};
@@ -87,10 +69,6 @@ class TransformationSynthesizerTest {
         assertEquals("[UBAX03] Master Planning Session",   prog.apply(UBAX03));
     }
 
-    // -----------------------------------------------------------------------
-    // Trivial identity: target == source column
-    // -----------------------------------------------------------------------
-
     @Test
     void identityTransform_singleColumn() {
         List<ExamplePair> examples = List.of(
@@ -106,10 +84,6 @@ class TransformationSynthesizerTest {
         assertEquals("Delta", prog.apply(new String[]{"Delta"}));
     }
 
-    // -----------------------------------------------------------------------
-    // Constant-only: target is always the same fixed string
-    // -----------------------------------------------------------------------
-
     @Test
     void constantOnlyTransform() {
         List<ExamplePair> examples = List.of(
@@ -123,11 +97,6 @@ class TransformationSynthesizerTest {
         assertNotNull(prog);
         assertEquals("FIXED", prog.apply(new String[]{"anything"}));
     }
-
-    // -----------------------------------------------------------------------
-    // Figure 2: "First Last" → first-initial + last-name + "@forsyth.k12.ga.us"
-    // Email = lower(first[0]) + lower(last) + domain
-    // -----------------------------------------------------------------------
 
     static final String[] CHOWDHURY  = {"Suhela Chowdhury",  "Principal"};
     static final String[] CRADDOCK   = {"Carolyn Craddock",  "Admin"};
@@ -150,21 +119,14 @@ class TransformationSynthesizerTest {
         assertEquals("kmoore"     + domain, prog.apply(MOORE));
     }
 
-    // -----------------------------------------------------------------------
-    // Null returned when no consistent program exists
-    // -----------------------------------------------------------------------
-
     @Test
     void returnsNullWhenNoConsistentProgram() {
-        // Two examples whose outputs share no derivable pattern from the source
         List<ExamplePair> examples = List.of(
                 new ExamplePair(new String[]{"abc"}, "xyz123"),
                 new ExamplePair(new String[]{"def"}, "pqr456")
         );
 
         TransformationProgram prog = synth.tryLearnTransform(examples);
-        // Either null or a program that happens to work — both are acceptable.
-        // If a program is returned it must be consistent with training examples.
         if (prog != null) {
             assertEquals("xyz123", prog.apply(new String[]{"abc"}));
             assertEquals("pqr456", prog.apply(new String[]{"def"}));

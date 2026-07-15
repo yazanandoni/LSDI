@@ -27,7 +27,6 @@ public class BenchmarkTestHelper {
         }
     }
 
-    /** Returns every benchmark pair id (one per sub-directory of the fixture dir), sorted. */
     public static List<String> listFixtures() throws IOException {
         try (java.util.stream.Stream<Path> entries = Files.list(FIXTURE_DIR)) {
             return entries
@@ -71,14 +70,6 @@ public class BenchmarkTestHelper {
         return map;
     }
 
-    /**
-     * Build a fingerprint from a row's key columns, resolving duplicate column
-     * names positionally: the k-th occurrence of a name in {@code keyCols} maps
-     * to the k-th column of that name in the row. This keeps duplicate headers
-     * (e.g. a target with two "Hanzi" columns) distinct, matching the positional
-     * ground-truth fingerprint. A plain {@code row.get(name)} would collapse both
-     * occurrences onto a single value and never equal the ground truth.
-     */
     public static String positionalFingerprint(Row row, List<String> keyCols, String sep) {
         List<String> rowCols = row.getColumnNames();
         boolean[] used = new boolean[rowCols.size()];
@@ -121,10 +112,6 @@ public class BenchmarkTestHelper {
             Row srcRow = forward ? pair[0] : pair[1];
             Row tgtRow = forward ? pair[1] : pair[0];
 
-            // Positional, matching the scoring in BenchmarkIntegrationTest:
-            // name-based lookup collapses duplicate source column names (e.g.
-            // two "Vice President" columns) and falsely reports correct joins
-            // as "(no ground truth entry)".
             String srcFp = positionalFingerprint(srcRow, srcKeyCols, "|");
             String tgtFp = positionalFingerprint(tgtRow, tgtKeyCols, " | ");
             List<String> expectedTgt = gtMap.get(srcFp);
