@@ -9,12 +9,16 @@ services:
       - ./autojoin/data:/app/autojoin/data
     environment:
       - APP_DATA_ROOT=autojoin
-      # JVM max heap — fixed at process start, so changing it requires
-      # recreating the container: set BACKEND_HEAP in a .env file next to this
-      # compose file (BACKEND_HEAP=32g) or inline
-      # (BACKEND_HEAP=32g docker compose up -d backend). The UI shows the
+      # JVM max heap — sized as a percentage of the memory Docker actually
+      # has on this machine, so the backend can never outgrow the host and
+      # get OOM-killed (a fixed -Xmx bigger than Docker's VM dies with
+      # "Exited (137)" mid-run). A run that is genuinely too large for the
+      # machine now fails with a graceful Java OutOfMemoryError instead.
+      # Override per machine in a .env file next to this compose file or
+      # inline, e.g. BACKEND_JVM_OPTS=-Xmx12g — the heap is fixed at process
+      # start, so recreate the container after changing it. The UI shows the
       # active value on the DBLP/Scalability pages.
-      - JAVA_TOOL_OPTIONS=-Xmx${BACKEND_HEAP:-8g}
+      - JAVA_TOOL_OPTIONS=${BACKEND_JVM_OPTS:--XX:MaxRAMPercentage=70}
       # Time budget for the SM/FJ-C/FJ-O baselines (paper §6.4 uses a 2h
       # timeout the same way; AJ is never cut off). Raise to let e.g. FJ-C
       # fight through larger sizes.

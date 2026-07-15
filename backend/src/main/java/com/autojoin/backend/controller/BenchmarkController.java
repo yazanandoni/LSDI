@@ -84,7 +84,10 @@ public class BenchmarkController {
                 resultStore.saveTrace(resultId, outcome.trace());
                 job.resultId = resultId;
                 job.status = "done";
-            } catch (Exception e) {
+            } catch (Throwable e) {
+                // Throwable, not Exception: a run too large for the heap throws
+                // OutOfMemoryError, which must fail the job visibly instead of
+                // leaving it "running" forever.
                 job.error = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
                 job.status = "error";
             }
@@ -106,8 +109,10 @@ public class BenchmarkController {
 
     /**
      * Active runtime limits, so the UI can display what it is running under.
-     * The JVM heap is fixed at process start — changing it means setting
-     * BACKEND_HEAP (docker-compose) and recreating the backend container.
+     * The JVM heap is fixed at process start — by default it is sized from
+     * the machine's available memory (-XX:MaxRAMPercentage); changing it
+     * means setting BACKEND_JVM_OPTS (docker-compose) and recreating the
+     * backend container.
      */
     @GetMapping("/system/info")
     public Map<String, Object> systemInfo() {
