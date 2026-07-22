@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { DecimalPipe } from '@angular/common';
 import { BenchmarkService } from '../../services/benchmark.service';
+import { BenchmarkSummary } from '../../app.models';
 import { AlgorithmTrace } from './trace.models';
 import { DiscoverySectionComponent } from './discovery-section.component';
 import { LearningSectionComponent } from './learning-section.component';
@@ -233,35 +234,21 @@ import { InputSectionComponent } from './input-section.component';
 export class TracePageComponent implements OnInit {
   resultId: string | null = null;
   trace: AlgorithmTrace | null = null;
-  traceResult: any = null;
+  traceResult: BenchmarkSummary | null = null;
   loading = true;
   error: string | null = null;
   backLink = '/results';
   backLabel = 'Results';
 
-  get winningDiscovery() {
+  private winningDir() {
     if (!this.trace) return null;
-    const dirTrace = this.trace.forwardWon ? this.trace.forwardTrace : this.trace.backwardTrace;
-    return dirTrace.discovery;
+    return this.trace.forwardWon ? this.trace.forwardTrace : this.trace.backwardTrace;
   }
 
-  get winningLearning() {
-    if (!this.trace) return null;
-    const dirTrace = this.trace.forwardWon ? this.trace.forwardTrace : this.trace.backwardTrace;
-    return dirTrace.learning;
-  }
-
-  get winningApplication() {
-    if (!this.trace) return null;
-    const dirTrace = this.trace.forwardWon ? this.trace.forwardTrace : this.trace.backwardTrace;
-    return dirTrace.application;
-  }
-
-  get winningFuzzy() {
-    if (!this.trace) return null;
-    const dirTrace = this.trace.forwardWon ? this.trace.forwardTrace : this.trace.backwardTrace;
-    return dirTrace.fuzzy;
-  }
+  get winningDiscovery() { return this.winningDir()?.discovery ?? null; }
+  get winningLearning() { return this.winningDir()?.learning ?? null; }
+  get winningApplication() { return this.winningDir()?.application ?? null; }
+  get winningFuzzy() { return this.winningDir()?.fuzzy ?? null; }
 
   constructor(
     private route: ActivatedRoute,

@@ -33,10 +33,6 @@ public final class PhysicalOps {
         return array[idx];
     }
 
-    public static String concat(String u, String v) {
-        return u + v;
-    }
-
     public static String constant(String v) {
         return v;
     }

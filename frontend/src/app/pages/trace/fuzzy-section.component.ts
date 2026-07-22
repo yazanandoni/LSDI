@@ -8,7 +8,7 @@ import { InfoTipComponent } from './info-tip.component';
   standalone: true,
   imports: [DecimalPipe, InfoTipComponent],
   template: `
-    @if (trace && trace.recoveredCount > 0) {
+    @if (trace) {
       <div class="fuzzy">
         <div class="fuzzy__header">
           <div>
@@ -20,101 +20,81 @@ import { InfoTipComponent } from './info-tip.component';
           </div>
         </div>
 
-        <div class="flow-diagram">
-          <div class="flow-node flow-node--warn">
-            <div class="flow-node__count">{{ trace.unmatchedBeforeFuzzy }}</div>
-            <div class="flow-node__label">Unmatched after equi-join</div>
-          </div>
-          <div class="flow-arrow">
-            <svg width="32" height="24" viewBox="0 0 32 24">
-              <path d="M4 12h20M24 6l6 6-6 6" stroke="var(--ocean-300)" stroke-width="2" fill="none" stroke-linecap="round"/>
-            </svg>
-          </div>
-          <div class="flow-node flow-node--fuzzy">
-            <div class="flow-node__threshold">threshold {{ trace.optimalThreshold | number:'1.4-4' }}</div>
-            <div class="flow-node__label">Fuzzy Join</div>
-          </div>
-          <div class="flow-arrow">
-            <svg width="32" height="24" viewBox="0 0 32 24">
-              <path d="M4 12h20M24 6l6 6-6 6" stroke="var(--ocean-300)" stroke-width="2" fill="none" stroke-linecap="round"/>
-            </svg>
-          </div>
-          <div class="flow-split">
-            <div class="flow-split__branch">
-              <div class="flow-split__arrow">↓</div>
-              <div class="flow-node flow-node--success">
-                <div class="flow-node__count">{{ trace.recoveredCount }}</div>
-                <div class="flow-node__label">Recovered ✓</div>
+        @if (trace.recoveredCount > 0) {
+          <div class="flow-diagram">
+            <div class="flow-node flow-node--warn">
+              <div class="flow-node__count">{{ trace.unmatchedBeforeFuzzy }}</div>
+              <div class="flow-node__label">Unmatched after equi-join</div>
+            </div>
+            <div class="flow-arrow">
+              <svg width="32" height="24" viewBox="0 0 32 24">
+                <path d="M4 12h20M24 6l6 6-6 6" stroke="var(--ocean-300)" stroke-width="2" fill="none" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div class="flow-node flow-node--fuzzy">
+              <div class="flow-node__threshold">threshold {{ trace.optimalThreshold | number:'1.4-4' }}</div>
+              <div class="flow-node__label">Fuzzy Join</div>
+            </div>
+            <div class="flow-arrow">
+              <svg width="32" height="24" viewBox="0 0 32 24">
+                <path d="M4 12h20M24 6l6 6-6 6" stroke="var(--ocean-300)" stroke-width="2" fill="none" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div class="flow-split">
+              <div class="flow-split__branch">
+                <div class="flow-split__arrow">↓</div>
+                <div class="flow-node flow-node--success">
+                  <div class="flow-node__count">{{ trace.recoveredCount }}</div>
+                  <div class="flow-node__label">Recovered ✓</div>
+                </div>
+              </div>
+              <div class="flow-split__branch">
+                <div class="flow-split__arrow">↓</div>
+                <div class="flow-node flow-node--warn">
+                  <div class="flow-node__count">{{ trace.remainingUnmatched }}</div>
+                  <div class="flow-node__label">Still unmatched</div>
+                </div>
               </div>
             </div>
-            <div class="flow-split__branch">
-              <div class="flow-split__arrow">↓</div>
-              <div class="flow-node flow-node--warn">
-                <div class="flow-node__count">{{ trace.remainingUnmatched }}</div>
-                <div class="flow-node__label">Still unmatched</div>
-              </div>
-            </div>
           </div>
-        </div>
 
-        @if (trace.sampleRecovered.length > 0) {
-          <div class="card sample-table">
-            <h4>Sample Recovered Pairs</h4>
-            <div class="sample-table__header">
-              <span>Source Value</span>
-              <span>Target Value</span>
-              <span>Jaccard Distance <app-info-tip text="Lower is closer. Values within the threshold (≤ {{ trace.optimalThreshold | number:'1.4-4' }}) were recovered as matches." /></span>
-              <span></span>
-            </div>
-            @for (sample of trace.sampleRecovered; track $index) {
-              <div class="sample-table__row">
-                <span class="mono">{{ sample.sourceValue }}</span>
-                <span class="mono">{{ sample.targetValue }}</span>
-                <span class="mono distance">{{ sample.jaccardDistance | number:'1.4-4' }}</span>
-                <span class="status-badge match">✓</span>
+          @if (trace.sampleRecovered.length > 0) {
+            <div class="card sample-table">
+              <h4>Sample Recovered Pairs</h4>
+              <div class="sample-table__header">
+                <span>Source Value</span>
+                <span>Target Value</span>
+                <span>Jaccard Distance <app-info-tip text="Lower is closer. Values within the threshold (≤ {{ trace.optimalThreshold | number:'1.4-4' }}) were recovered as matches." /></span>
+                <span></span>
               </div>
-            }
+              @for (sample of trace.sampleRecovered; track $index) {
+                <div class="sample-table__row">
+                  <span class="mono">{{ sample.sourceValue }}</span>
+                  <span class="mono">{{ sample.targetValue }}</span>
+                  <span class="mono distance">{{ sample.jaccardDistance | number:'1.4-4' }}</span>
+                  <span class="status-badge match">✓</span>
+                </div>
+              }
+            </div>
+          }
+        } @else if (trace.skipped && trace.unmatchedBeforeFuzzy > 0) {
+          <div class="card info-card">
+            <div class="info-card__icon">⏭️</div>
+            <div>
+              <p class="info-card__title">Fuzzy recovery skipped</p>
+              <p class="info-card__body">
+                {{ trace.unmatchedBeforeFuzzy }} source rows were unmatched after the equi-join,
+                but every unique target value already has at least one match.
+                The unmatched rows are duplicates or produce a key that does not
+                correspond to any target record &mdash; fuzzy recovery cannot help.
+              </p>
+            </div>
+          </div>
+        } @else {
+          <div class="flow-diagram flow-diagram--empty">
+            <p class="empty-msg">No unmatched rows to recover — the equi-join covered all source rows.</p>
           </div>
         }
-      </div>
-    } @else if (trace && trace.skipped && trace.unmatchedBeforeFuzzy > 0) {
-      <div class="fuzzy">
-        <div class="fuzzy__header">
-          <div>
-            <h3>4. Fuzzy Join Recovery</h3>
-            <p class="helper">
-              Recovering rows that almost matched the equi-join key using
-              constrained Jaccard-distance matching.
-            </p>
-          </div>
-        </div>
-        <div class="card info-card">
-          <div class="info-card__icon">⏭️</div>
-          <div>
-            <p class="info-card__title">Fuzzy recovery skipped</p>
-            <p class="info-card__body">
-              {{ trace.unmatchedBeforeFuzzy }} source rows were unmatched after the equi-join,
-              but every unique target value already has at least one match.
-              The unmatched rows are duplicates or produce a key that does not
-              correspond to any target record &mdash; fuzzy recovery cannot help.
-            </p>
-          </div>
-        </div>
-      </div>
-    } @else if (trace) {
-      <div class="fuzzy">
-        <div class="fuzzy__header">
-          <div>
-            <h3>4. Fuzzy Join Recovery</h3>
-            <p class="helper">
-              Recovering rows that almost matched the equi-join key using
-              constrained Jaccard-distance matching.
-            </p>
-          </div>
-        </div>
-        <div class="flow-diagram flow-diagram--empty">
-          <p class="empty-msg">No unmatched rows to recover — the equi-join covered all source rows.</p>
-        </div>
       </div>
     }
   `,

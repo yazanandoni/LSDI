@@ -14,7 +14,7 @@ export interface Mismatch {
   joinedTarget: string;
 }
 
-export interface BenchmarkSummaryView {
+export interface BenchmarkSummary {
   resultId: string;
   pairId: string;
   direction: string;

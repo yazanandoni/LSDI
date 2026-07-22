@@ -114,7 +114,7 @@
         <div class="card diag__panel">
           <h4>Mismatches</h4>
           <p>Total: {{ selectedResult.mismatches.length }}</p>
-          <p>Sampled: {{ selectedResult.mismatches.length }}</p>
+          <p>Sampled: {{ Math.min(selectedResult.mismatches.length, 5) }}</p>
         </div>
       </div>
 
@@ -127,7 +127,7 @@
         </div>
       </div>
 
-      <div class="card mismatch-table" *ngIf="selectedResult && selectedResult.mismatches.length > 0; else noMismatch">
+      <div class="card mismatch-table" *ngIf="selectedResult.mismatches.length > 0; else noMismatch">
         <h4>Mismatch samples</h4>
         <div class="mismatch" *ngFor="let mismatch of selectedResult.mismatches | slice:0:5">
           <p class="mono">{{ mismatch.sourceFingerprint }}</p>

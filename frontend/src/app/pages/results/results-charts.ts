@@ -4,7 +4,7 @@ import { GraphicComponent, GridComponent, LegendComponent, TitleComponent, Toolt
 import { CanvasRenderer } from 'echarts/renderers';
 
 // GraphicComponent renders the paper-style method-label boxes (option.graphic)
-// — without it registered, echarts silently drops them.
+// without it registered, echarts silently drops them.
 echarts.use([BarChart, PieChart, ScatterChart, GraphicComponent, GridComponent, LegendComponent, TitleComponent, TooltipComponent, CanvasRenderer]);
 
 export interface MethodAverage {
@@ -22,9 +22,7 @@ const METHOD_COLORS: Record<string, string> = {
 
 /**
  * Figure 5 (paper) — average precision (x) vs recall (y), one point per
- * method, over the Web benchmark cases that were run. Sized as a small square
- * panel (grid margins chosen so the plot area is 1:1 inside a 420x440 canvas)
- * to match the paper's layout.
+ * method, over the Web benchmark cases that were run.
  */
 export function buildMethodAverageOption(averages: MethodAverage[],
                                          title = 'Web') {
@@ -43,8 +41,6 @@ export function buildMethodAverageOption(averages: MethodAverage[],
                `Recall: ${a.recall.toFixed(3)}<br/>${a.cases} case(s)`;
       }
     },
-    // 480x440 canvas: 340x340 plot area — equal x/y scale like the paper;
-    // the wide right margin gives shifted labels room at precision = 1.0.
     grid: { left: 55, right: 85, top: 55, bottom: 45 },
     xAxis: {
       type: 'value', name: 'Precision', min: 0, max: 1, interval: 0.2,
@@ -68,17 +64,12 @@ export function buildMethodAverageOption(averages: MethodAverage[],
       })),
       label: { show: false }
     }],
-    // Paper-style annotations: boxed method names placed around the points
-    // with leader lines, positions computed to never collide (Figure 5 look).
     graphic: { elements: placeMethodLabels(averages) }
   };
 }
 
 /**
- * Greedy non-colliding label placement on the fixed 480x440 canvas
- * (plot area: x 55..395, y 55..395 — must match the grid above).
- * Each label is a white rounded box with a thin leader line to its point,
- * like the annotation boxes in the paper's Figure 5.
+ * Greedy non-colliding label placement on the fixed 480x440 canvas.
  */
 function placeMethodLabels(averages: MethodAverage[]): any[] {
   const X0 = 55, Y0 = 55, SPAN = 340, W = 480, H = 440;
@@ -90,17 +81,14 @@ function placeMethodLabels(averages: MethodAverage[]): any[] {
     a.x < b.x + b.w + m && b.x < a.x + a.w + m &&
     a.y < b.y + b.h + m && b.y < a.y + a.h + m;
 
-  // Points themselves count as obstacles so no box covers a dot.
   const obstacles: Box[] = averages.map(a =>
     ({ x: px(a.precision) - 8, y: py(a.recall) - 8, w: 16, h: 16 }));
 
   const elements: any[] = [];
-  // Deterministic order: leftmost points place first.
   const ordered = [...averages].sort((a, b) => a.precision - b.precision || a.recall - b.recall);
   for (const a of ordered) {
     const cx = px(a.precision), cy = py(a.recall);
     const w = a.method.length * 6.8 + 10, h = 17;
-    // Candidate box centers around the point, near ring then far ring.
     const cands: [number, number][] = [];
     for (const d of [14, 30, 48]) {
       cands.push([cx + w / 2 + d, cy], [cx, cy - h / 2 - d], [cx - w / 2 - d, cy],
@@ -120,7 +108,6 @@ function placeMethodLabels(averages: MethodAverage[]): any[] {
     if (!box) box = { x: Math.min(cx + 10, W - w - 2), y: Math.max(cy - h - 10, 2), w, h };
     obstacles.push(box);
 
-    // Leader line from the dot to the box edge (clip the segment to the box).
     const bx = box.x + w / 2, by = box.y + h / 2;
     const dx = bx - cx, dy = by - cy;
     const tx = dx !== 0 ? (w / 2 + 2) / Math.abs(dx) : Infinity;

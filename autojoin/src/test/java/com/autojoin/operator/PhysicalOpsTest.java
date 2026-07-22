@@ -113,14 +113,6 @@ class PhysicalOpsTest {
         assertEquals("George W. Bush", PhysicalOps.substring("george w. bush", 0, -1, Casing.TITLE));
     }
 
-    // --- concat ---
-
-    @Test
-    void concatJoinsTwoStrings() {
-        assertEquals("BarackObama", PhysicalOps.concat("Barack", "Obama"));
-        assertEquals("Barack Obama", PhysicalOps.concat("Barack", " Obama"));
-    }
-
     // --- constant ---
 
     @Test

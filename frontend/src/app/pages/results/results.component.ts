@@ -2,7 +2,7 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { DecimalPipe, NgFor, NgIf, SlicePipe } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { BenchmarkService } from '../../services/benchmark.service';
-import { BenchmarkSummaryView } from '../../app.models';
+import { BenchmarkSummary } from '../../app.models';
 import { API_BASE_URL } from '../../core/api.config';
 import {
   MethodAverage,
@@ -21,8 +21,9 @@ import * as echarts from 'echarts/core';
 })
 export class ResultsComponent implements OnInit, OnDestroy {
   readonly apiBase = API_BASE_URL;
-  results: BenchmarkSummaryView[] = [];
-  selectedResult: BenchmarkSummaryView | null = null;
+  readonly Math = Math;
+  results: BenchmarkSummary[] = [];
+  selectedResult: BenchmarkSummary | null = null;
   methodAverages: MethodAverage[] = [];
   syntheticAverages: MethodAverage[] = [];
   precisionRecallChart?: echarts.ECharts;
@@ -74,13 +75,13 @@ export class ResultsComponent implements OnInit, OnDestroy {
     });
   }
 
-  selectResult(result: BenchmarkSummaryView): void {
+  selectResult(result: BenchmarkSummary): void {
     this.selectedResult = result;
     this.updateCharts();
     this.syncHeights();
   }
 
-  viewTrace(result: BenchmarkSummaryView): void {
+  viewTrace(result: BenchmarkSummary): void {
     this.router.navigate(['/trace', result.resultId]);
   }
 
@@ -106,15 +107,15 @@ export class ResultsComponent implements OnInit, OnDestroy {
    * average precision over non-empty runs only, recall over all runs.
    * Timed-out runs join nothing, so they count as recall 0.
    */
-  private computeMethodAverages(results: BenchmarkSummaryView[],
+  private computeMethodAverages(results: BenchmarkSummary[],
                                 include: (pairId: string) => boolean): MethodAverage[] {
-    const latest = new Map<string, BenchmarkSummaryView>();
+    const latest = new Map<string, BenchmarkSummary>();
     for (const r of results) { // results are newest-first, keep first occurrence
       if (!include(r.pairId)) continue;
       const key = `${r.pairId}|${r.method || 'AJ'}`;
       if (!latest.has(key)) latest.set(key, r);
     }
-    const byMethod = new Map<string, BenchmarkSummaryView[]>();
+    const byMethod = new Map<string, BenchmarkSummary[]>();
     for (const r of latest.values()) {
       const m = r.method || 'AJ';
       byMethod.set(m, [...(byMethod.get(m) || []), r]);

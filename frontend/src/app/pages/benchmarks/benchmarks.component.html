@@ -12,7 +12,7 @@
     <div class="toolbar__left">
       <span class="toolbar__count">{{ selectedIds.size }} / {{ benchmarks.length }} selected</span>
     </div>
-<div class="toolbar__right">
+    <div class="toolbar__right">
         <button class="btn btn--primary" (click)="runAllMethods()" [disabled]="running || benchmarks.length === 0">
           {{ running ? 'Running...' : 'Run all × ' + allMethods.length + ' methods (' + (benchmarks.length * allMethods.length) + ' jobs)' }}
         </button>
@@ -21,7 +21,7 @@
         <button class="btn btn--primary" (click)="runSelected()" [disabled]="selectedIds.size === 0 || running">
           {{ running ? 'Running...' : 'Run selected (' + selectedIds.size + ')' }}
         </button>
-      </div>
+    </div>
   </div>
 
   <div class="table-wrap card" *ngIf="benchmarks.length > 0; else emptyState">

@@ -3,6 +3,7 @@ package com.autojoin.backend.model;
 import java.util.List;
 
 public record BenchmarkSummary(
+        String resultId,
         String pairId,
         String direction,
         int truePositives,
@@ -20,4 +21,7 @@ public record BenchmarkSummary(
         String method,
         boolean timedOut
 ) {
+    public BenchmarkSummary {
+        resultId = resultId != null ? resultId : "";
+    }
 }

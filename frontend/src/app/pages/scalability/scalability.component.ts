@@ -73,9 +73,6 @@ export class ScalabilityComponent implements OnInit, OnDestroy {
     const methods = this.selectedMethod === 'Compare all'
       ? ['AJ', 'SM', 'FJ-C', 'FJ-O'] : [this.selectedMethod];
 
-    // Strictly sequential via the async job API (start + poll): parallel runs
-    // compete for CPU and distort the timing curves, and holding one HTTP
-    // connection per run dies at the browser's connection limit.
     const runs: { pairId: string; method: string }[] = [];
     for (const m of methods) {
       for (const id of pairIds) runs.push({ pairId: id, method: m });
@@ -173,13 +170,9 @@ export class ScalabilityComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Paper Figure 8: AJ drawn as stacked bars broken into its stages
-   * (Indexing / Find Trans. / Equi-Join), the baselines as lines, on a BROKEN
-   * y-axis — a lower panel scaled for AJ's near-constant seconds and an upper
-   * panel for the baselines' hundreds of seconds. Baseline lines are drawn in
-   * both panels and clipped, so they visually "shoot through" the break.
-   * Timed-out runs are pinned at the cut-off with an explicit marker.
-   */
+ * Paper Figure 8: AJ drawn as stacked bars, baselines as lines, on a broken
+ * y-axis — lower panel for AJ, upper panel for baselines.
+ */
   private buildChartOption(): any {
     const font = { fontFamily: 'Space Grotesk', fontSize: 12 };
     const sizes = this.sizes;
@@ -204,7 +197,6 @@ export class ScalabilityComponent implements OnInit, OnDestroy {
     const upperMax = ScalabilityComponent.niceCeil(maxSec * 1.08);
     const lowerGrid = split ? 1 : 0;
 
-    // AJ stacked bars (paper stages; our §5 fuzzy time folds into Equi-Join).
     const stageDefs: { name: string; color: string; val: (r: ScalabilityRow) => number }[] = [
       { name: 'Indexing', color: '#0f4c5c', val: r => sec(r.indexingMs) },
       { name: 'Find Trans.', color: '#3a7d8c', val: r => sec(r.learningMs) },
@@ -224,7 +216,6 @@ export class ScalabilityComponent implements OnInit, OnDestroy {
       })
     }));
 
-    // Baseline lines — one copy per panel; each panel clips what is out of range.
     const lineSeries = (m: string, gridIdx: number) => ({
       name: m,
       type: 'line',
@@ -256,7 +247,6 @@ export class ScalabilityComponent implements OnInit, OnDestroy {
       if (split) series.push(lineSeries(m, 1));
     }
 
-    // Dashed cut-off line at the time budget, in the panel that contains it.
     const timedOutSec = this.rows.filter(r => r.timedOut).map(r => sec(r.totalMs));
     if (timedOutSec.length > 0 && series.length > 0) {
       const budget = Math.min(...timedOutSec);

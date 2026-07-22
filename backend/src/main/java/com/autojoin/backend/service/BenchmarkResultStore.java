@@ -24,11 +24,6 @@ public class BenchmarkResultStore {
         return id;
     }
 
-    public String save(String id, BenchmarkSummary summary) {
-        results.put(id, summary);
-        return id;
-    }
-
     public void saveCsv(String id, String csv) {
         resultCsvs.put(id, csv);
     }
@@ -51,7 +46,6 @@ public class BenchmarkResultStore {
         return Optional.ofNullable(traces.get(id));
     }
 
-    /** Erase every stored run (summaries, CSVs and traces). */
     public void clear() {
         results.clear();
         resultCsvs.clear();

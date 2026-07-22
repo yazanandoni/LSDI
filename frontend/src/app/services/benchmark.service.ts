@@ -4,7 +4,7 @@ import { Observable, firstValueFrom } from 'rxjs';
 import { API_BASE_URL } from '../core/api.config';
 import {
   BenchmarkDescriptor,
-  BenchmarkSummaryView
+  BenchmarkSummary
 } from '../app.models';
 import { AlgorithmTrace } from '../pages/trace/trace.models';
 
@@ -40,13 +40,12 @@ export class BenchmarkService {
     return this.http.get<SystemInfo>(`${API_BASE_URL}/system/info`);
   }
 
-  /**
-   * Run (pairId, method) pairs strictly sequentially WITHOUT holding an HTTP
-   * connection open for the duration of a run: browsers abort requests that
-   * stay silent for minutes ("status 0 Unknown Error"), so each run is started
-   * via run-async and its job polled every few seconds until it finishes.
-   * Returns the failure descriptions (empty array = all runs succeeded).
-   */
+/**
+ * Run (pairId, method) pairs strictly sequentially WITHOUT holding an HTTP
+ * connection open for the duration of a run: browsers abort requests that
+ * stay silent for minutes ("status 0 Unknown Error"), so each run is started
+ * via run-async and its job polled every few seconds until it finishes.
+ */
   async runQueue(runs: { pairId: string; method: string }[],
                  onProgress: (message: string) => void): Promise<string[]> {
     const failures: string[] = [];
@@ -54,8 +53,6 @@ export class BenchmarkService {
       const run = runs[i];
       const label = `Running ${i + 1}/${runs.length}: ${run.pairId} (${run.method})`;
       onProgress(`${label}...`);
-      // Smooth once-per-second timer; re-anchored to the backend's
-      // authoritative elapsedMs on every poll so it neither skips nor drifts.
       let anchor = Date.now();
       const ticker = setInterval(
         () => onProgress(`${label}... ${Math.max(0, Math.round((Date.now() - anchor) / 1000))}s`),
@@ -87,16 +84,16 @@ export class BenchmarkService {
     return failures;
   }
 
-  listResults(): Observable<BenchmarkSummaryView[]> {
-    return this.http.get<BenchmarkSummaryView[]>(`${API_BASE_URL}/results`);
+  listResults(): Observable<BenchmarkSummary[]> {
+    return this.http.get<BenchmarkSummary[]>(`${API_BASE_URL}/results`);
   }
 
   clearResults(): Observable<void> {
     return this.http.delete<void>(`${API_BASE_URL}/results`);
   }
 
-  getResult(id: string): Observable<BenchmarkSummaryView> {
-    return this.http.get<BenchmarkSummaryView>(`${API_BASE_URL}/results/${id}`);
+  getResult(id: string): Observable<BenchmarkSummary> {
+    return this.http.get<BenchmarkSummary>(`${API_BASE_URL}/results/${id}`);
   }
 
   getTrace(id: string): Observable<AlgorithmTrace> {

@@ -47,7 +47,6 @@ public class BenchmarkService {
     private final List<Path> fixtureRoots;
     private final List<BenchmarkFixtureLoader> fixtureLoaders;
     private final AutoJoin autoJoin = new AutoJoin();
-    /** AJ-E (paper sec. 6.2): Auto-Join with equality join only, no sec. 5 fuzzy step. */
     private final AutoJoin autoJoinEquiOnly = new AutoJoin(false);
 
     /**
@@ -174,8 +173,6 @@ public class BenchmarkService {
         String dirLabel;
         String methodLabel = method != null ? method : "AJ";
         boolean timedOut = false;
-        // AJ and AJ-E are the paper's own method (AJ-E = equality join only, no
-        // sec. 5 fuzzy step) — both run untimed with a full trace, like AJ always has.
         boolean isAutoJoin = methodLabel.equals("AJ") || methodLabel.equals("AJ-E");
 
         if (isAutoJoin) {
@@ -221,7 +218,7 @@ public class BenchmarkService {
         String csv = buildResultCsv(joinedPairs);
         if (joinedPairs == null || joinedPairs.isEmpty()) {
             return new BenchmarkRunOutcome(
-                new BenchmarkSummary(pairId, timedOut ? dirLabel : methodLabel + ": empty",
+                new BenchmarkSummary("", pairId, timedOut ? dirLabel : methodLabel + ": empty",
                         0, 0, gtMap.size(), 0.0, 0.0, elapsed, transformDesc, List.of(),
                         idxMs, lrnMs, jnMs, fzMs, methodLabel, timedOut),
                 csv, trace);
@@ -255,7 +252,7 @@ public class BenchmarkService {
         double recall = gtPairs == 0 ? 0.0 : (double) tp / gtPairs;
 
         return new BenchmarkRunOutcome(
-            new BenchmarkSummary(pairId, dirLabel, tp, produced.size(), gtPairs, precision, recall, elapsed,
+            new BenchmarkSummary("", pairId, dirLabel, tp, produced.size(), gtPairs, precision, recall, elapsed,
                     transformDesc, mismatches,
                     idxMs, lrnMs, jnMs, fzMs, methodLabel, false),
             csv, trace);

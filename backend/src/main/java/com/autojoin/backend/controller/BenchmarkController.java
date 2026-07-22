@@ -3,7 +3,6 @@ package com.autojoin.backend.controller;
 import com.autojoin.backend.model.BenchmarkDescriptor;
 import com.autojoin.backend.model.BenchmarkRunRequest;
 import com.autojoin.backend.model.BenchmarkSummary;
-import com.autojoin.backend.model.BenchmarkSummaryView;
 import com.autojoin.backend.service.BenchmarkResultStore;
 import com.autojoin.backend.service.BenchmarkService;
 import com.autojoin.backend.service.BenchmarkService.BenchmarkRunOutcome;
@@ -68,7 +67,6 @@ public class BenchmarkController {
         return benchmarkService.listBenchmarks();
     }
 
-    /** Start a run in the background; poll /benchmarks/jobs/{id} for the result. */
     @PostMapping("/benchmarks/run-async")
     public ResponseEntity<Map<String, String>> runBenchmarkAsync(
             @Valid @RequestBody BenchmarkRunRequest request) {
@@ -104,11 +102,6 @@ public class BenchmarkController {
         return ResponseEntity.ok(body);
     }
 
-    /**
-     * Active runtime limits, so the UI can display what it is running under.
-     * The JVM heap is fixed at process start — changing it means setting
-     * BACKEND_HEAP (docker-compose) and recreating the backend container.
-     */
     @GetMapping("/system/info")
     public Map<String, Object> systemInfo() {
         return Map.of(
@@ -117,9 +110,9 @@ public class BenchmarkController {
     }
 
     @GetMapping("/results/{id}")
-    public ResponseEntity<BenchmarkSummaryView> getResult(@PathVariable("id") String id) {
+    public ResponseEntity<BenchmarkSummary> getResult(@PathVariable("id") String id) {
         return resultStore.find(id)
-                .map(summary -> ResponseEntity.ok(toView(id, summary)))
+                .map(summary -> ResponseEntity.ok(withResultId(id, summary)))
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
@@ -140,7 +133,6 @@ public class BenchmarkController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    /** Erase all stored runs (the store is in-memory; a restart does the same). */
     @DeleteMapping("/results")
     public ResponseEntity<Void> clearResults() {
         resultStore.clear();
@@ -148,14 +140,14 @@ public class BenchmarkController {
     }
 
     @GetMapping("/results")
-    public List<BenchmarkSummaryView> listResults() {
+    public List<BenchmarkSummary> listResults() {
         return resultStore.list().stream()
-                .map(stored -> toView(stored.id(), stored.summary()))
+                .map(stored -> withResultId(stored.id(), stored.summary()))
                 .toList();
     }
 
-    private static BenchmarkSummaryView toView(String id, BenchmarkSummary summary) {
-        return new BenchmarkSummaryView(
+    private static BenchmarkSummary withResultId(String id, BenchmarkSummary summary) {
+        return new BenchmarkSummary(
                 id, summary.pairId(), summary.direction(),
                 summary.truePositives(), summary.joinedPairs(), summary.groundTruthPairs(),
                 summary.precision(), summary.recall(), summary.durationMs(),

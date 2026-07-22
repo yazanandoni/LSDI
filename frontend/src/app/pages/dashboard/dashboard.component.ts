@@ -2,7 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { NgFor, NgIf, DecimalPipe } from '@angular/common';
 import { BenchmarkService } from '../../services/benchmark.service';
-import { BenchmarkSummaryView } from '../../app.models';
+import { BenchmarkSummary } from '../../app.models';
 
 @Component({
   selector: 'app-dashboard',
@@ -12,7 +12,7 @@ import { BenchmarkSummaryView } from '../../app.models';
   styleUrl: './dashboard.component.scss'
 })
 export class DashboardComponent implements OnInit {
-  recentResults: BenchmarkSummaryView[] = [];
+  recentResults: BenchmarkSummary[] = [];
   summaryStats = {
     totalRuns: 0,
     avgPrecision: 0,
@@ -39,7 +39,7 @@ export class DashboardComponent implements OnInit {
     });
   }
 
-  viewTrace(result: BenchmarkSummaryView): void {
+  viewTrace(result: BenchmarkSummary): void {
     this.router.navigate(['/trace', result.resultId], { queryParams: { from: 'dashboard' } });
   }
 }

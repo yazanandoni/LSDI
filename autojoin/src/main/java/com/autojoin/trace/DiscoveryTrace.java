@@ -3,7 +3,7 @@ package com.autojoin.trace;
 import java.util.List;
 
 public class DiscoveryTrace {
-    private List<ColumnPairGroup> columnPairGroups;
+    private final List<ColumnPairGroup> columnPairGroups;
 
     public DiscoveryTrace() {
         this.columnPairGroups = List.of();

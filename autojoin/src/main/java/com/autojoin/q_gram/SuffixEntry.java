@@ -1,8 +1,7 @@
 package com.autojoin.q_gram;
 
 
-/**
-* class that represents an entry of the suffix index.  */
+/** An entry of the suffix index. */
 class SuffixEntry {
     String suffixText;
     int originalRowIndex;
