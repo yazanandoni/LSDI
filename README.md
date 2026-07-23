@@ -62,7 +62,7 @@ Pages in the navigation menu:
 
 **Algorithms used in this project, in one sentence each**: `AJ` is the whole AutoJoin algorithm; `AJ-E` is AutoJoin without the fuzzy-join stage; `SM` joins on the longest common substring; `FJ-C`/`FJ-FR`/`FJ-O` are fuzzy-join baselines (column-based / full-row based / best-config oracle); `DQ-P`/`DQ-R` are direct join on q-gram matches (precision-oriented / recall-oriented).
 
-⚠️ **Results are stored **in memory**: shutdown of the backend deletes them all.
+⚠️ **Results are stored in memory**: shutdown of the backend deletes them all.
 
 ## Common commands
 
