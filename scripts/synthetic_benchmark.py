@@ -1,53 +1,4 @@
 #!/usr/bin/env python3
-"""Generate the paper's Synthetic benchmark (AutoJoin sec. 6.3.3).
-
-The AutoJoin paper reconstructs 4 synthetic datasets from Warren & Tompa,
-"Multi-column substring matching for database schema translation" (VLDB 2006),
-"constructed by either splitting or merging columns from source tables to
-produce target tables". Neither paper published the data, so — like the
-AutoJoin authors — we rebuild it from the descriptions:
-
-  UserID      (W&T 4.1)  first/middle/last names -> login = first[0] + last.
-                          W&T's real logins mixed several formulas; AutoJoin
-                          reports AJ at F=1.0, which is only possible with a
-                          single formula, so one formula is used for all rows.
-  Time        (W&T 4.2)  second/minute/hour columns -> one time column.
-                          AutoJoin says the parts are joined by ":" (the W&T
-                          original had no separator); we follow AutoJoin.
-  NameConcat  (W&T 4.3)  first/last -> full = first + last (no separator,
-                          lowercase, exactly like W&T's Table 9).
-  Citeseer    (W&T 4.4)  year, title, author1..author15 -> citation =
-                          year + title + author1. W&T used the CiteSeer OAI
-                          dump, which no longer exists; records come from our
-                          DBLP extract instead (same domain — W&T themselves
-                          cross-linked CiteSeer to DBLP in their sec. 4.5).
-
-W&T always added noise columns to the source table (random numbers, random
-alphanumeric codes, street addresses and a full RFC-2822 timestamp) "so that
-finding which source columns contribute to the target was not trivialised";
-we do the same. For Time, the RFC-2822 timestamp is derived from the SAME
-underlying timestamp as the second/minute/hour columns ("10,000 randomly
-generated time-stamps") — that is also the only construction under which
-q-gram methods can find any evidence at all on Time (two-character values
-cannot contain the length>=3 q-grams both papers require), matching the
-AutoJoin paper's remark that Time has "many common substrings and few 1-to-1
-q-gram matches".
-
-Rows are kept small (default 1000) so every method — including the quadratic
-fuzzy joins — finishes within the benchmark timeout. Output is deterministic
-(fixed seed). Target tables are stored in shuffled order, as in W&T.
-
-Known deviations from the AutoJoin paper's reported numbers: (1) DQ-P/DQ-R
-score perfectly on OUR Time case (the paper reports them low there) — the
-same timestamp column that gives AJ its learning evidence necessarily gives
-the q-gram baselines their matches; the paper's exact Time construction is
-not recoverable from its description. (2) Our SM reimplementation derives
-its candidate formulas from row-aligned example pairs, so it scores ~0 on
-these shuffled targets (the AutoJoin authors likewise note their SM
-underperformed the original work).
-
-Usage:  python scripts/synthetic_benchmark.py [--n 1000]
-"""
 import argparse
 import csv
 import json
@@ -94,7 +45,6 @@ def rfc2822(rng, hms=None):
 
 
 def noise(rng, hms=None):
-    """W&T's noise columns: random number, alphanumeric code, address, RFC-2822."""
     return {
         "noise_num": str(rng.randrange(10_000, 99_999_999)),
         "noise_code": "".join(rng.choice(ALNUM) for _ in range(rng.randrange(6, 13))),
@@ -104,7 +54,6 @@ def noise(rng, hms=None):
 
 
 def write_case(name, src_cols, src_rows, tgt_col, gt_pairs, src_keys, rng):
-    """Write source/target/ground_truth CSVs + fixture.json for one case."""
     raw_dir = RAW / name
     raw_dir.mkdir(parents=True, exist_ok=True)
     with open(raw_dir / "source.csv", "w", newline="", encoding="utf-8") as f:
@@ -152,12 +101,6 @@ def gen_time(n, rng):
     write_case("time", cols, rows, "time", gts, ["second", "minute", "hour"], rng)
 
 
-# W&T's name tables had ~70,000 UNIQUE values per column; a last name that
-# repeats across rows has no 1-to-1 q-gram match and produces no learning
-# evidence (both papers keep only unambiguous matches). With a compact name
-# list, uniqueness caps these two cases at len(LAST) rows — still plenty.
-
-
 def gen_userid(n, rng):
     lasts = rng.sample(LAST, min(n, len(LAST)))
     rows, gts = [], []
@@ -191,7 +134,7 @@ def gen_citeseer(n, rng):
         raise SystemExit("citeseer needs the DBLP extract — run scripts/setup.sh (or "
                          "scripts/run_scalability.sh) first to generate "
                          + str(DBLP_SOURCES[0].parent.parent))
-    n_authors = 15  # W&T: "a series of 15 columns, each of which contains the name of a single author"
+    n_authors = 15
     rows, gts, citations = [], [], set()
     with open(src_csv, newline="", encoding="utf-8") as f:
         for rec in csv.DictReader(f):

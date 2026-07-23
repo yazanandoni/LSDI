@@ -1,28 +1,4 @@
 #!/usr/bin/env bash
-#
-# One-shot bootstrap for a fresh clone.
-#
-# The dblp-scalability fixtures are committed, but the raw CSVs they point to
-# are gitignored (see .gitignore) — so on a new computer the backend fails with
-# FileNotFoundException until the data is generated. This script closes that
-# gap end-to-end:
-#
-#   1. checks the required tools and installs the missing ones where it can
-#      (lxml via pip; Python / Docker via winget, brew or apt),
-#   2. checks that every committed dblp-scalability fixture has its raw CSVs
-#      (source/target/ground_truth), downloading dblp.xml.gz (~900 MB) and
-#      parsing it (scripts/dblp_to_csv.py) if any are missing,
-#   3. builds and starts the docker compose stack:
-#        backend  -> http://localhost:8081
-#        frontend -> http://localhost:4200
-#
-# Usage:
-#   scripts/setup.sh                 # full bootstrap
-#   SKIP_DOCKER=1 scripts/setup.sh   # deps + data only, don't start docker
-#
-# Windows (Git Bash):
-#   & "C:\Program Files\Git\bin\bash.exe" ./scripts/setup.sh
-#
 set -u -o pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -40,8 +16,6 @@ have() { command -v "$1" >/dev/null 2>&1; }
 say()  { printf '\n>> %s\n' "$*"; }
 die()  { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
-# Install a package with whatever package manager this machine has.
-# $1 = winget id, $2 = brew formula (prefix "cask:" for casks), $3 = apt package
 pkg_install() {
   case "$OS" in
     windows)
@@ -59,7 +33,6 @@ pkg_install() {
   esac
 }
 
-# --- 1. which DBLP sizes does the committed fixture set require? -------------
 SIZES=()
 for f in "$FIXDIR"/dblp-*/fixture.json; do
   [ -f "$f" ] || continue
@@ -81,17 +54,17 @@ else
   say "DBLP data: missing sizes: ${MISSING[*]} (of ${SIZES[*]})"
 fi
 
-# --- 2. dependency checks (python/lxml/curl only needed when generating) -----
+# --- dependency checks (python/lxml/curl) -----
 if [ "${#MISSING[@]}" -gt 0 ]; then
 
-  # curl — needed to download dblp.xml.gz (Git Bash ships it on Windows)
+  # curl: needed to download dblp.xml.gz
   if ! have curl; then
     say "curl not found — trying to install"
     pkg_install cURL.cURL curl curl || die "curl is required; install it and re-run"
     have curl || die "curl still not on PATH — open a new terminal and re-run"
   fi
 
-  # python — try the common launchers, skipping the Windows Store stub
+  # python
   PYTHON=""
   find_python() {
     PYTHON=""
@@ -112,7 +85,7 @@ if [ "${#MISSING[@]}" -gt 0 ]; then
   fi
   say "Python: using '$PYTHON' ($($PYTHON --version 2>&1))"
 
-  # pip + lxml — the DBLP parser needs lxml.iterparse
+  # pip + lxml
   if ! $PYTHON -m pip --version >/dev/null 2>&1; then
     $PYTHON -m ensurepip --upgrade >/dev/null 2>&1 \
       || die "pip is missing for '$PYTHON' — install pip and re-run"
@@ -126,7 +99,7 @@ if [ "${#MISSING[@]}" -gt 0 ]; then
   fi
 fi
 
-# docker — always required (unless SKIP_DOCKER)
+# docker
 if [ -z "${SKIP_DOCKER:-}" ]; then
   if ! have docker; then
     # Docker Desktop may be installed but not on this shell's PATH (Windows)
@@ -145,7 +118,7 @@ if [ -z "${SKIP_DOCKER:-}" ]; then
   fi
 fi
 
-# --- 3. download + parse DBLP if any size is missing --------------------------
+# --- download + parse DBLP if any size is missing --------------------------
 if [ "${#MISSING[@]}" -gt 0 ]; then
   mkdir -p "$DATA"
   if [ ! -s "$DATA/dblp.xml.gz" ]; then
@@ -173,7 +146,7 @@ if [ "${#MISSING[@]}" -gt 0 ]; then
   say "DBLP data complete for all fixture sizes (${SIZES[*]})"
 fi
 
-# --- 4. start the docker compose stack ----------------------------------------
+# --- start the docker compose stack ----------------------------------------
 [ -n "${SKIP_DOCKER:-}" ] && { say "SKIP_DOCKER set — done."; exit 0; }
 
 if ! docker info >/dev/null 2>&1; then
