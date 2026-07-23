@@ -56,7 +56,7 @@
           <strong>{{ result.recall | number: '1.2-2' }}</strong>
         </div>
       </div>
-      <button class="btn btn--trace" (click)="viewTrace(result)">
+      <button class="btn btn--trace" *ngIf="(result.method || 'AJ') === 'AJ'" (click)="viewTrace(result)">
         View Trace →
       </button>
     </article>

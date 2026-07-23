@@ -97,7 +97,7 @@
                [href]="apiBase + '/results/' + selectedResult.resultId + '/csv'"
                download>Download CSV</a>
           </div>
-          <div>
+          <div *ngIf="(selectedResult.method || 'AJ') === 'AJ'">
             <button class="btn btn--secondary" (click)="viewTrace(selectedResult)">
               View Trace →
             </button>

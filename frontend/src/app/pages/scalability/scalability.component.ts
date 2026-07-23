@@ -192,7 +192,7 @@ export class ScalabilityComponent implements OnInit, OnDestroy {
     const baselineMethods = this.activeMethods.filter(m => m !== 'AJ');
     const maxSec = Math.max(...this.rows.map(r => sec(r.totalMs)), 0);
     const ajMaxSec = ajRows.length > 0 ? Math.max(...ajRows.map(r => sec(r.totalMs))) : maxSec;
-    const lowerMax = ScalabilityComponent.niceCeil(ajMaxSec * 1.4 || 1);
+    const lowerMax = Math.min(ScalabilityComponent.niceCeil(ajMaxSec * 1.4 || 1), 100);
     const split = maxSec > lowerMax; // need the broken axis?
     const upperMax = ScalabilityComponent.niceCeil(maxSec * 1.08);
     const lowerGrid = split ? 1 : 0;
@@ -202,12 +202,12 @@ export class ScalabilityComponent implements OnInit, OnDestroy {
       { name: 'Find Trans.', color: '#3a7d8c', val: r => sec(r.learningMs) },
       { name: 'Equi-Join', color: '#8fb8c4', val: r => sec(r.joinMs + r.fuzzyMs) }
     ];
-    const series: any[] = ajRows.length === 0 ? [] : stageDefs.map(st => ({
+    const barSeries = (gridIdx: number) => stageDefs.map(st => ({
       name: st.name,
       type: 'bar',
-      stack: 'AJ',
-      xAxisIndex: lowerGrid,
-      yAxisIndex: lowerGrid,
+      stack: 'AJ' + gridIdx,
+      xAxisIndex: gridIdx,
+      yAxisIndex: gridIdx,
       barWidth: '35%',
       itemStyle: { color: st.color },
       data: sizes.map(s => {
@@ -215,6 +215,11 @@ export class ScalabilityComponent implements OnInit, OnDestroy {
         return r ? st.val(r) : null;
       })
     }));
+    const series: any[] = [];
+    if (ajRows.length > 0) {
+      series.push(...barSeries(lowerGrid));
+      if (split) series.push(...barSeries(0));
+    }
 
     const lineSeries = (m: string, gridIdx: number) => ({
       name: m,

@@ -7,6 +7,7 @@ This project is a reimplementation of **AutoJoin** ("Auto-Join: Joining Tables b
 **What can you do with this project?**
 
 - Run the paper's **Web benchmark** (31 real table pairs) with AutoJoin and 7 baseline methods, and compare precision/recall like the paper's Figure 5.
+- Run the paper's **Synthetic benchmark** (4 reconstructed cases: UserID, Time, NameConcat, Citeseer — §6.3.3) across 7 methods, and compare F-measure like the paper's Figure 5.
 - Run the **DBLP scalability benchmark** (100 → 1,000,000 rows) and see running times like the paper's Figure 8.
 - Inspect any run step by step: which q-grams matched, which transformation was learned, which rows were fuzzy-recovered.
 
